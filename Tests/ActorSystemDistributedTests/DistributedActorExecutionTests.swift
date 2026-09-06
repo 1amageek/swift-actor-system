@@ -25,6 +25,45 @@ struct DistributedActorExecutionTests {
     }
 
     @Test
+    func facadeSelectsTaskScopedCallOptionsForValueAndVoidCalls() async throws {
+        let compilerTarget = try await Self.captureIncrementTarget()
+        let voidCompilerTarget = try await Self.captureVoidTarget()
+        let contextCapture = InvocationContextCapture()
+        let fixture = try DistributedCounterFixture(
+            compilerTarget: compilerTarget,
+            voidCompilerTarget: voidCompilerTarget,
+            clientCallOptions: ActorCallOptions(timeout: .seconds(5)),
+            serverContextCapture: contextCapture
+        )
+        try await fixture.start()
+
+        let remote = try DistributedCounter.resolve(
+            id: fixture.serverCounter.id,
+            using: fixture.clientSystem
+        )
+        #expect(try await remote.increment(by: 1) == 2)
+        #expect(contextCapture.values() == [.seconds(5)])
+
+        contextCapture.removeAll()
+        #expect(try await ActorCallOptions.withValue(.defaults) {
+            try await remote.increment(by: 1)
+        } == 3)
+        #expect(contextCapture.values() == [nil])
+
+        contextCapture.removeAll()
+        try await remote.reset()
+        #expect(contextCapture.values() == [.seconds(5)])
+
+        contextCapture.removeAll()
+        try await ActorCallOptions.withValue(.defaults) {
+            try await remote.reset()
+        }
+        #expect(contextCapture.values() == [nil])
+
+        try await fixture.shutdown()
+    }
+
+    @Test
     func registrationRejectsAliasesThatDoNotMatchDescriptorMethods() throws {
         let backend = SwiftActorSystem(
             configuration: ActorSystemConfiguration(
@@ -81,6 +120,27 @@ struct DistributedActorExecutionTests {
         }
         return try #require(capturedTarget.value)
     }
+
+    private static func captureVoidTarget() async throws -> String {
+        let capturedTarget = TargetCapture()
+        let system = try TestDistributedActorSystem(capturingTargetIn: capturedTarget)
+        let remote = try DistributedCounter.resolve(
+            id: ActorAddress(
+                type: DistributedCounterFixture.actorTypeID,
+                identity: "compiler-target-probe-void"
+            ),
+            using: system
+        )
+        do {
+            try await remote.reset()
+            Issue.record("Expected the target capture system to stop the call")
+        } catch TestDistributedActorSystem.CaptureError.targetCaptured {
+            #expect(capturedTarget.value != nil)
+        } catch {
+            Issue.record("Unexpected compiler target capture error: \(error)")
+        }
+        return try #require(capturedTarget.value)
+    }
 }
 
 private distributed actor DistributedCounter {
@@ -98,12 +158,17 @@ private distributed actor DistributedCounter {
     distributed func observedInvocationCount() async throws -> Int {
         invocationCount
     }
+
+    distributed func reset() async throws {
+        value = 1
+    }
 }
 
 private struct DistributedCounterFixture: Sendable {
     static let actorTypeID = ActorTypeID(high: 100, low: 101)
     static let integerTypeID = ActorTypeID(high: 102, low: 103)
     static let methodID = ActorMethodID(104)
+    static let voidMethodID = ActorMethodID(107)
     static let fingerprint = ActorSchemaFingerprint(high: 105, low: 106)
 
     let clientBackend: SwiftActorSystem
@@ -111,7 +176,12 @@ private struct DistributedCounterFixture: Sendable {
     let clientSystem: TestDistributedActorSystem
     let serverCounter: DistributedCounter
 
-    init(compilerTarget: String) throws {
+    init(
+        compilerTarget: String,
+        voidCompilerTarget: String? = nil,
+        clientCallOptions: ActorCallOptions = .defaults,
+        serverContextCapture: InvocationContextCapture? = nil
+    ) throws {
         let clientTransportID = ActorTransportID("distributed-client")
         let serverTransportID = ActorTransportID("distributed-server")
         let clientTransport = LoopbackActorTransport(
@@ -137,31 +207,50 @@ private struct DistributedCounterFixture: Sendable {
                 sessionIdentitySource: FixedActorSessionIdentitySource(
                     ActorSessionID(201)
                 )
-            )
+            ),
+            callOptions: clientCallOptions
+        )
+        let serverConfiguration = ActorSystemConfiguration(
+            sessionIdentitySource: FixedActorSessionIdentitySource(
+                ActorSessionID(202)
+            ),
+            inboundInterceptor: serverContextCapture
+                ?? DirectActorInboundInvocationInterceptor()
         )
         let serverBackend = SwiftActorSystem(
             transports: [serverTransportID: serverTransport],
-            configuration: ActorSystemConfiguration(
-                sessionIdentitySource: FixedActorSessionIdentitySource(
-                    ActorSessionID(202)
-                )
-            )
+            configuration: serverConfiguration
         )
+        var aliasesByTarget = [compilerTarget: Self.methodID]
+        if let voidCompilerTarget {
+            aliasesByTarget[voidCompilerTarget] = Self.voidMethodID
+        }
         let aliases = try ActorTargetAliasTable(
             toolchainFingerprint: "captured-test-toolchain",
-            aliases: [compilerTarget: Self.methodID]
+            aliases: aliasesByTarget
         )
+        var methods = [
+            ActorMethodDescriptor(
+                id: Self.methodID,
+                parameterTypeIDs: [Self.integerTypeID],
+                resultTypeID: Self.integerTypeID,
+                errorTypeID: nil
+            ),
+        ]
+        if voidCompilerTarget != nil {
+            methods.append(
+                ActorMethodDescriptor(
+                    id: Self.voidMethodID,
+                    parameterTypeIDs: [],
+                    resultTypeID: nil,
+                    errorTypeID: nil
+                )
+            )
+        }
         let descriptor = ActorTypeDescriptor(
             id: Self.actorTypeID,
             schemaFingerprint: Self.fingerprint,
-            methods: [
-                ActorMethodDescriptor(
-                    id: Self.methodID,
-                    parameterTypeIDs: [Self.integerTypeID],
-                    resultTypeID: Self.integerTypeID,
-                    errorTypeID: nil
-                ),
-            ]
+            methods: methods
         )
         for backend in [clientBackend, serverBackend] {
             try backend.registerCodec(
@@ -206,6 +295,28 @@ private final class TargetCapture: Sendable {
 
     func store(_ value: String) {
         storage.withLock { $0 = value }
+    }
+}
+
+private final class InvocationContextCapture: ActorInboundInvocationInterceptor, Sendable {
+    private let storage = Mutex<[Duration?]>([])
+
+    func values() -> [Duration?] {
+        storage.withLock { $0 }
+    }
+
+    func removeAll() {
+        storage.withLock { $0.removeAll() }
+    }
+
+    func intercept(
+        _ invocation: ActorInvocation,
+        context: ActorInvocationContext,
+        execution: ActorInvocationExecution
+    ) async throws -> ActorInvocationResult {
+        _ = invocation
+        storage.withLock { $0.append(context.remainingTimeout) }
+        return try await execution()
     }
 }
 

@@ -401,7 +401,7 @@ public final class SwiftActorSystem: DistributedActorSystem, Sendable {
                     schemaFingerprint: registration.descriptor.schemaFingerprint,
                     payload: payload
                 ),
-                options: callOptions
+                options: ActorCallOptions.resolve(callOptions)
             )
         } catch let failure as ActorApplicationFailure {
             throw try codecs.decodeError(
@@ -439,7 +439,7 @@ public final class SwiftActorSystem: DistributedActorSystem, Sendable {
                     schemaFingerprint: registration.descriptor.schemaFingerprint,
                     payload: payload
                 ),
-                options: callOptions
+                options: ActorCallOptions.resolve(callOptions)
             )
             guard result.payload.isEmpty else {
                 throw ActorSystemError.decodingFailed

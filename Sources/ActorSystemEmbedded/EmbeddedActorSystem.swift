@@ -213,7 +213,7 @@ public final class EmbeddedActorSystem: Sendable {
                     schemaFingerprint: schemaFingerprint,
                     payload: payload
                 ),
-                options: callOptions
+                options: ActorCallOptions.resolve(callOptions)
             )
             return try resultCodec.decode(
                 result.payload,
@@ -250,7 +250,7 @@ public final class EmbeddedActorSystem: Sendable {
                     schemaFingerprint: schemaFingerprint,
                     payload: payload
                 ),
-                options: callOptions
+                options: ActorCallOptions.resolve(callOptions)
             )
             guard result.payload.isEmpty else {
                 throw ActorSystemError.decodingFailed

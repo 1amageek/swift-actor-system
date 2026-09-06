@@ -6,6 +6,101 @@ import Testing
 @Suite
 struct ActorSystemCoreBehaviorTests {
     @Test
+    func taskScopedCallOptionsOverrideAndRestore() async throws {
+        let initializer = ActorCallOptions(timeout: .seconds(5))
+        let nested = ActorCallOptions(timeout: .milliseconds(7))
+        let sibling = ActorCallOptions(timeout: .milliseconds(11))
+
+        #expect(ActorCallOptions.resolve(initializer) == initializer)
+
+        try await ActorCallOptions.withValue(.defaults) {
+            #expect(ActorCallOptions.resolve(initializer) == .defaults)
+            await ActorCallOptions.withValue(nested) {
+                #expect(ActorCallOptions.resolve(initializer) == nested)
+            }
+            #expect(ActorCallOptions.resolve(initializer) == .defaults)
+
+            do {
+                try await ActorCallOptions.withValue(nested) {
+                    throw CallOptionsProbeError.failed
+                }
+                Issue.record("Expected the scoped operation to throw")
+            } catch CallOptionsProbeError.failed {
+                #expect(ActorCallOptions.resolve(initializer) == .defaults)
+            }
+
+            let firstGate = ManualReplyGate()
+            let secondGate = ManualReplyGate()
+            let concurrent = await withTaskGroup(
+                of: ActorCallOptions.self,
+                returning: [ActorCallOptions].self
+            ) { group in
+                group.addTask {
+                    await ActorCallOptions.withValue(nested) {
+                        await firstGate.waitForRelease()
+                        return ActorCallOptions.resolve(initializer)
+                    }
+                }
+                group.addTask {
+                    await ActorCallOptions.withValue(sibling) {
+                        await secondGate.waitForRelease()
+                        return ActorCallOptions.resolve(initializer)
+                    }
+                }
+
+                await firstGate.waitUntilEntered()
+                await secondGate.waitUntilEntered()
+                await firstGate.release()
+                await secondGate.release()
+
+                var values: [ActorCallOptions] = []
+                for await value in group {
+                    values.append(value)
+                }
+                return values
+            }
+            #expect(Set(concurrent) == Set([nested, sibling]))
+
+            let cancellation = Task {
+                let scopedValue = await ActorCallOptions.withValue(nested) {
+                    do {
+                        try await Task.sleep(for: .seconds(60))
+                        return false
+                    } catch is CancellationError {
+                        return ActorCallOptions.resolve(initializer) == nested
+                    } catch {
+                        return false
+                    }
+                }
+                let restoredValue = ActorCallOptions.resolve(initializer) == .defaults
+                return scopedValue && restoredValue
+            }
+            cancellation.cancel()
+            #expect(await cancellation.value)
+            #expect(ActorCallOptions.resolve(initializer) == .defaults)
+        }
+
+        #expect(ActorCallOptions.resolve(initializer) == initializer)
+    }
+
+    @Test
+    func startTaskDoesNotLeakTaskScopedCallOptionsToConsumers() async throws {
+        let initializer = ActorCallOptions(timeout: .seconds(5))
+        let scoped = ActorCallOptions(timeout: .milliseconds(7))
+        let capture = CallOptionsCaptureInterceptor(fallback: initializer)
+        let fixture = try CorePairFixture(inboundInterceptor: capture)
+
+        try await ActorCallOptions.withValue(scoped) {
+            try await fixture.start()
+        }
+
+        let result = try await fixture.client.invoke(fixture.invocation(value: 1))
+        #expect(try Int.decodeActorValue(from: result.payload, options: .init()) == 2)
+        #expect(capture.values() == [initializer])
+        try await fixture.shutdown()
+    }
+
+    @Test
     func localClaimActivatesBeforeDirectoryLookup() async throws {
         let address = ActorAddress(
             type: ActorTypeID(high: 80, low: 81),
@@ -1281,6 +1376,36 @@ private struct CorePairFixture: Sendable {
             schemaFingerprint: fingerprint,
             payload: try value.encodeActorValue()
         )
+    }
+}
+
+private enum CallOptionsProbeError: Error {
+    case failed
+}
+
+private final class CallOptionsCaptureInterceptor:
+    ActorInboundInvocationInterceptor,
+    Sendable
+{
+    private let fallback: ActorCallOptions
+    private let storage = Mutex<[ActorCallOptions]>([])
+
+    init(fallback: ActorCallOptions) {
+        self.fallback = fallback
+    }
+
+    func values() -> [ActorCallOptions] {
+        storage.withLock { $0 }
+    }
+
+    func intercept(
+        _ invocation: ActorInvocation,
+        context: ActorInvocationContext,
+        execution: ActorInvocationExecution
+    ) async throws -> ActorInvocationResult {
+        _ = (invocation, context)
+        storage.withLock { $0.append(ActorCallOptions.resolve(fallback)) }
+        return try await execution()
     }
 }
 

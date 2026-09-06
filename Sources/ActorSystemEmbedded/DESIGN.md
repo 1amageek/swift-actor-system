@@ -43,6 +43,10 @@ EmbeddedActorSystem -- instance store --> ActorSystemCore
 - An explicit `ActorClock` is required for deadline behavior; the default
   Embedded clock reports `ActorClockUnavailable`.
 - Shutdown is terminal and every later invocation or resolution is rejected.
+- Generated calls select the active task-scoped `ActorCallOptions` value when
+  present and otherwise use the system's immutable initializer default. A
+  scoped `.defaults` value therefore disables an initializer timeout without
+  mutating the system or changing generated method signatures.
 
 ## Runtime Flows
 
@@ -51,6 +55,11 @@ init -> register generated target -> start Core
 invoke -> lookup instance -> execute -> encode result/failure
 shutdown -> stop Core -> release instances -> reject later calls
 ```
+
+The facade resolves options through the
+[Core task-scope contract](../ActorSystemCore/DESIGN.md) immediately before its
+generated value and void invoke paths delegate to Core; a selected timeout is
+encoded into the outgoing frame and enforced with the configured `ActorClock`.
 
 For a generated Embedded host, the public actor method is an untyped remote
 entry point. A local dispatch first invokes the authored typed implementation;
@@ -76,8 +85,8 @@ cancellation failures as application errors.
 ## Verification and Change Impact
 
 `Tests/ActorSystemEmbeddedTests` covers activation, registration, invocation,
-typed failure decoding, shutdown, and post-shutdown rejection. Generation
-tests additionally verify typed local versus untyped remote generated
-surfaces. The checked-in
+typed failure decoding, task-scoped call-option precedence/restoration,
+parallel isolation, shutdown, and post-shutdown rejection. Generation tests
+additionally verify typed local versus untyped remote generated surfaces. The checked-in
 `Validation/EmbeddedWASM` fixture additionally proves compile, link, and Node
 runtime behavior with the pinned Embedded SDK.

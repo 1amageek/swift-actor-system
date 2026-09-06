@@ -49,6 +49,10 @@ SwiftActorSystem -- registries/codecs --> ActorSystemCore
   unregistered application error keeps the existing `.remoteFailure`
   fallback, and Core system/cancellation failures are not reclassified as
   application payloads.
+- Compiler-generated remote calls select the active task-scoped
+  `ActorCallOptions` value when present and otherwise use the system's immutable
+  initializer default. Scoped options do not alter authored method signatures,
+  schema identity, or the typed-local/untyped-remote failure boundary.
 
 ## Runtime Flows
 
@@ -57,6 +61,10 @@ register types/bootstraps -> start Core -> resolve or instantiate actor
 distributed call -> encode arguments -> Core invoke -> decode result/failure
 shutdown -> seal registrations -> Core terminal shutdown
 ```
+
+The facade resolves options through the
+[Core task-scope contract](../ActorSystemCore/DESIGN.md) immediately before its
+value and void remote invoke paths delegate to Core.
 
 ## State, Ownership, and Lifecycle
 
@@ -78,6 +86,6 @@ remote failure.
 ## Verification and Change Impact
 
 `Tests/ActorSystemDistributedTests` covers execution, registration, codec
-lookups, duplicate ownership, shutdown paths, and compiler-erased typed-error
-handling. Changes to distributed mapping require those tests plus Core and
-Embedded generated validation.
+lookups, duplicate ownership, shutdown paths, compiler-erased typed-error
+handling, and task-scoped option precedence/restoration. Changes to distributed
+mapping require those tests plus Core and Embedded generated validation.

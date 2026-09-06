@@ -19,6 +19,9 @@ transport contracts, source schema locks, generated codecs, and target
 projections. It does not own a network protocol implementation, a platform
 timer, a WebSocket implementation, or application actor business state.
 
+`ActorSystemCore` owns the task-scoped `ActorCallOptions` contract. The
+Distributed and Embedded facades consume that contract before invoking Core.
+
 Generated projections preserve an authored typed method effect where the
 language projection requires it, while every runtime remote call keeps an
 untyped system-error boundary so system and cancellation failures remain
@@ -83,6 +86,9 @@ ActorSystemCore
   views without eager `Data` materialization.
 - Shutdown is terminal: it drains owned tasks, releases registrations outside
   registration critical sections, and rejects later invocation/resolve work.
+- Task-scoped call options follow the
+  [Core contract](Sources/ActorSystemCore/DESIGN.md); facades select the scoped
+  value before their immutable initializer default.
 - Embedded projections use only capabilities available from the selected
   Embedded SDK. Deadline behavior requires an injected `ActorClock`; the
   default `ContinuousActorClock` reports `ActorClockUnavailable` on Embedded.
@@ -127,6 +133,7 @@ shutdown.
 | Contract | Evidence owner | Required evidence |
 | --- | --- | --- |
 | Core frame/lifecycle/error behavior | Core tests | focused native tests and source-path review |
+| Task-scoped call options | Core plus Distributed/Embedded facade tests | default override, nested restoration, concurrent isolation, error/cancellation restoration, and exact timeout behavior |
 | Generation and projection stability | Generation/BuildSupport tests | schema lock reconciliation and generated-source checks |
 | Embedded registration and shutdown | Embedded tests | typed failure, release, and post-shutdown tests |
 | Embedded target capability | validation fixture | pinned SDK compile/link/runtime execution |

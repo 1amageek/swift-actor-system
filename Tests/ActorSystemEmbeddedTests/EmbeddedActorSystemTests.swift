@@ -91,6 +91,73 @@ struct EmbeddedActorSystemTests {
     }
 
     @Test
+    func facadeSelectsTaskScopedCallOptionsForValueAndVoidCalls() async throws {
+        let valueCapture = InvocationContextCapture()
+        let valueFixture = try EmbeddedPairFixture(
+            target: .increment,
+            clientCallOptions: ActorCallOptions(timeout: .seconds(5)),
+            contextCapture: valueCapture
+        )
+        try await valueFixture.start()
+
+        let result: Int = try await valueFixture.client.invoke(
+            actor: valueFixture.address,
+            method: valueFixture.method,
+            schemaFingerprint: valueFixture.fingerprint,
+            argument: 1,
+            argumentCodec: .portable(),
+            resultCodec: .portable()
+        )
+        #expect(result == 2)
+        #expect(valueCapture.values() == [.seconds(5)])
+
+        valueCapture.removeAll()
+        let scopedResult: Int = try await ActorCallOptions.withValue(.defaults) {
+            try await valueFixture.client.invoke(
+                actor: valueFixture.address,
+                method: valueFixture.method,
+                schemaFingerprint: valueFixture.fingerprint,
+                argument: 2,
+                argumentCodec: .portable(),
+                resultCodec: .portable()
+            )
+        }
+        #expect(scopedResult == 3)
+        #expect(valueCapture.values() == [nil])
+        try await valueFixture.shutdown()
+
+        let voidCapture = InvocationContextCapture()
+        let voidFixture = try EmbeddedPairFixture(
+            target: .void,
+            clientCallOptions: ActorCallOptions(timeout: .seconds(5)),
+            contextCapture: voidCapture
+        )
+        try await voidFixture.start()
+
+        try await voidFixture.client.invokeVoid(
+            actor: voidFixture.address,
+            method: voidFixture.method,
+            schemaFingerprint: voidFixture.fingerprint,
+            argument: 0,
+            argumentCodec: .portable()
+        )
+        #expect(voidCapture.values() == [.seconds(5)])
+
+        voidCapture.removeAll()
+        try await ActorCallOptions.withValue(.defaults) {
+            try await voidFixture.client.invokeVoid(
+                actor: voidFixture.address,
+                method: voidFixture.method,
+                schemaFingerprint: voidFixture.fingerprint,
+                argument: 0,
+                argumentCodec: .portable()
+            )
+        }
+        #expect(voidCapture.values() == [nil])
+        try await voidFixture.shutdown()
+    }
+
+    @Test
     func generatedRuntimeSupportDecodesTypedApplicationError() async throws {
         let fixture = try EmbeddedPairFixture(target: .reject)
         try await fixture.start()
@@ -201,10 +268,27 @@ private final class EmbeddedPairInstance: EmbeddedActorInstance, Sendable {
     )
 }
 
+private final class InvocationContextCapture: Sendable {
+    private let storage = Mutex<[Duration?]>([])
+
+    func values() -> [Duration?] {
+        storage.withLock { $0 }
+    }
+
+    func removeAll() {
+        storage.withLock { $0.removeAll() }
+    }
+
+    func record(_ timeout: Duration?) {
+        storage.withLock { $0.append(timeout) }
+    }
+}
+
 private struct EmbeddedPairFixture: Sendable {
     enum Behavior: Sendable {
         case increment
         case reject
+        case `void`
     }
 
     let client: EmbeddedActorSystem
@@ -216,7 +300,11 @@ private struct EmbeddedPairFixture: Sendable {
     let method = ActorMethodID(3)
     let fingerprint = ActorSchemaFingerprint(high: 4, low: 5)
 
-    init(target behavior: Behavior) throws {
+    init(
+        target behavior: Behavior,
+        clientCallOptions: ActorCallOptions = .defaults,
+        contextCapture: InvocationContextCapture? = nil
+    ) throws {
         let clientTransportID = ActorTransportID("embedded-client")
         let serverTransportID = ActorTransportID("embedded-server")
         let clientTransport = LoopbackActorTransport(
@@ -239,7 +327,8 @@ private struct EmbeddedPairFixture: Sendable {
                 ]
             ),
             transports: [clientTransportID: clientTransport],
-            configuration: embeddedConfiguration(session: 1)
+            configuration: embeddedConfiguration(session: 1),
+            callOptions: clientCallOptions
         )
         self.server = EmbeddedActorSystem(
             transports: [serverTransportID: serverTransport],
@@ -251,7 +340,8 @@ private struct EmbeddedPairFixture: Sendable {
                 address: address,
                 method: method,
                 fingerprint: fingerprint,
-                behavior: behavior
+                behavior: behavior,
+                contextCapture: contextCapture
             )
         )
     }
@@ -271,12 +361,14 @@ private struct EmbeddedFixtureTarget: ActorInvocationTarget {
     let address: ActorAddress
     let descriptor: ActorTypeDescriptor
     let behavior: EmbeddedPairFixture.Behavior
+    let contextCapture: InvocationContextCapture?
 
     init(
         address: ActorAddress,
         method: ActorMethodID,
         fingerprint: ActorSchemaFingerprint,
-        behavior: EmbeddedPairFixture.Behavior
+        behavior: EmbeddedPairFixture.Behavior,
+        contextCapture: InvocationContextCapture? = nil
     ) {
         self.address = address
         self.descriptor = ActorTypeDescriptor(
@@ -292,12 +384,14 @@ private struct EmbeddedFixtureTarget: ActorInvocationTarget {
             ]
         )
         self.behavior = behavior
+        self.contextCapture = contextCapture
     }
 
     func invoke(
         _ invocation: ActorInvocation,
         context: ActorInvocationContext
     ) async throws -> ActorInvocationResult {
+        contextCapture?.record(context.remainingTimeout)
         let value = try Int.decodeActorValue(
             from: invocation.payload,
             options: .init()
@@ -310,6 +404,8 @@ private struct EmbeddedFixtureTarget: ActorInvocationTarget {
                 typeID: ActorTypeID(high: 20, low: 21),
                 payload: try EmbeddedFixtureError.rejected(value).encodeActorValue()
             )
+        case .void:
+            return ActorInvocationResult()
         }
     }
 }

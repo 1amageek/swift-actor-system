@@ -28,11 +28,31 @@ public struct ActorInvocationResult: Hashable, Sendable {
 public struct ActorCallOptions: Hashable, Sendable {
     public let timeout: Duration?
 
+    @TaskLocal private static var scopedValue: ActorCallOptions?
+
     public init(timeout: Duration? = nil) {
         self.timeout = timeout
     }
 
     public static let defaults = ActorCallOptions()
+
+    /// Runs an asynchronous operation with call options scoped to its task.
+    public nonisolated(nonsending) static func withValue<Result>(
+        _ options: ActorCallOptions,
+        operation: nonisolated(nonsending) () async throws -> Result
+    ) async rethrows -> Result {
+        try await $scopedValue.withValue(options, operation: operation)
+    }
+
+    package static func resolve(_ fallback: ActorCallOptions) -> ActorCallOptions {
+        scopedValue ?? fallback
+    }
+
+    package nonisolated(nonsending) static func withClearedValue<Result>(
+        operation: nonisolated(nonsending) () async throws -> Result
+    ) async rethrows -> Result {
+        try await $scopedValue.withValue(nil, operation: operation)
+    }
 }
 
 public enum ActorInvocationOrigin: Hashable, Sendable {

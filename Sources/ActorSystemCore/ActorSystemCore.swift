@@ -93,7 +93,9 @@ public final class ActorSystemCore: Sendable {
             let task = Task {
                 try await ActorOwnedTaskContext.$current.withValue(identity) {
                     await gate.wait()
-                    try await self.performStart()
+                    try await ActorCallOptions.withClearedValue {
+                        try await self.performStart()
+                    }
                 }
             }
             state.startTask = task
