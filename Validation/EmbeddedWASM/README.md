@@ -1,10 +1,24 @@
 # Embedded WASM validation
 
 This fixture is the target-level validation for the generated Embedded actor
-projection. `Input/Counter.swift` is the authored distributed actor. The
+projection. `Input/Counter.swift` and `Input/TypedCounter.swift` are authored
+distributed actors. The original Counter contract remains unchanged; the
+separate TypedCounter exercises authored `throws(CounterError)`. The
 checked-in host and client sources under `Sources/EmbeddedActorHost` and
 `Sources/EmbeddedActorClient` were produced by `ActorSystemGeneration` from the
 same `ActorSchema.lock`; they are not handwritten proxy implementations.
+
+| Boundary | Required behavior |
+| --- | --- |
+| Authored method / Embedded private local method | Retain `throws(CounterError)` |
+| Native compiler remote thunk / generated Embedded remote method | Untyped `throws`, preserving application, cancellation, and system errors |
+| Application failure | Exact generated `CounterError.rejected(-42)` across the transport |
+| Pre-cancelled call / post-shutdown call | `ActorSystemError.cancelled` / `.shuttingDown`, not a business error |
+
+The Native executable uses the same authored actors and generated native
+bootstrap. Its module name is `CounterFixture`, matching the compiler aliases
+in the lock. Select the executable product explicitly when cross-compiling;
+the Native compiler's `Distributed` module is not an Embedded dependency.
 
 ## Fixed toolchain
 
@@ -22,10 +36,10 @@ not use a library from another snapshot.
 
 ## Generate and build
 
-The validation package declares the public `swift-actor-system` `0.1.0`
-dependency, so a released checkout can build it without knowing this
-repository's filesystem layout. It resolves that dependency from the released
-GitHub URL declared in `Validation/EmbeddedWASM/Package.swift`.
+The validation package pins the public `swift-actor-system` Git revision
+`308c56105d3203045b8633e77d983153eb3bd72c`, containing the typed-error fix.
+It requires no local dependency path or edit override. This unreleased
+revision must be replaced with the corresponding version at a future release.
 
 Run the generation and build commands below from the repository root. The
 tool is built first with the pinned Swiftly selector, and the SDK root and
@@ -65,7 +79,7 @@ test -d "$RESOURCES"
 test -f "$UNICODE_ARCHIVE"
 
 # Build the generation tool before resolving its output path.
-"$TIMEOUT" 120 -- "$SWIFT" build --build-path "$PWD/.build" --jobs 2
+"$TIMEOUT" 600 -- "$SWIFT" build --build-path "$PWD/.build" --jobs 2
 BIN="$("$SWIFT" build --build-path "$PWD/.build" --show-bin-path)"
 ACTOR_SYSTEM="$BIN/actor-system"
 test -x "$ACTOR_SYSTEM"
@@ -73,13 +87,16 @@ test -x "$ACTOR_SYSTEM"
 "$TIMEOUT" 120 -- "$ACTOR_SYSTEM" generate \
   --module CounterFixture --package embedded-actor-validation --profile nativeHost \
   --source "$VALIDATION/Input/Counter.swift" --source-root "$VALIDATION/Input" \
+  --source "$VALIDATION/Input/TypedCounter.swift" \
   --lock "$VALIDATION/ActorSchema.lock" --output "$VALIDATION/.generated/native" \
   --swiftc "$SWIFTC" --compiler-arg -sdk --compiler-arg "$MACOS_SDK" \
   --compiler-arg -I --compiler-arg "$BIN"
 
 "$TIMEOUT" 120 -- "$ACTOR_SYSTEM" project \
   --module CounterFixture --package embedded-actor-validation --profile embeddedHost \
+  --available-module ActorSystemCore \
   --source "$VALIDATION/Input/Counter.swift" --source-root "$VALIDATION/Input" \
+  --source "$VALIDATION/Input/TypedCounter.swift" \
   --lock "$VALIDATION/ActorSchema.lock" --output "$VALIDATION/.generated/host" \
   --swiftc "$SWIFTC" --compiler-arg -sdk --compiler-arg "$SDK_ROOT" \
   --compiler-arg -sysroot --compiler-arg "$SDK_ROOT" \
@@ -91,6 +108,7 @@ test -x "$ACTOR_SYSTEM"
 "$TIMEOUT" 120 -- "$ACTOR_SYSTEM" project \
   --module CounterFixture --package embedded-actor-validation --profile embeddedClient \
   --source "$VALIDATION/Input/Counter.swift" --source-root "$VALIDATION/Input" \
+  --source "$VALIDATION/Input/TypedCounter.swift" \
   --lock "$VALIDATION/ActorSchema.lock" --output "$VALIDATION/.generated/client" \
   --swiftc "$SWIFTC" --compiler-arg -sdk --compiler-arg "$SDK_ROOT" \
   --compiler-arg -sysroot --compiler-arg "$SDK_ROOT" \
@@ -101,18 +119,27 @@ test -x "$ACTOR_SYSTEM"
 
 cp -R "$VALIDATION/.generated/host/." "$VALIDATION/Sources/EmbeddedActorHost/"
 cp -R "$VALIDATION/.generated/client/." "$VALIDATION/Sources/EmbeddedActorClient/"
+cp "$VALIDATION/.generated/native/ActorSchema.generated.swift" \
+  "$VALIDATION/.generated/native/ActorCodecs.generated.swift" \
+  "$VALIDATION/.generated/native/Native/ActorRegistrations.generated.swift" \
+  "$VALIDATION/Sources/NativeActorValidation/"
 
-"$TIMEOUT" 120 -- env \
+"$TIMEOUT" 300 -- "$SWIFT" build --package-path "$VALIDATION" \
+  --product CounterFixture --jobs 2
+NATIVE_BIN="$("$SWIFT" build --package-path "$VALIDATION" --show-bin-path)"
+"$TIMEOUT" 120 -- "$NATIVE_BIN/CounterFixture"
+
+"$TIMEOUT" 300 -- env \
   ACTOR_SYSTEM_UNICODE_ARCHIVE="$UNICODE_ARCHIVE" \
   "$SWIFT" build --package-path "$VALIDATION" \
     --config-path "$CONFIG" --scratch-path "$SCRATCH" \
-    --swift-sdk "$EMBEDDED_SDK_ID" --jobs 2
+    --swift-sdk "$EMBEDDED_SDK_ID" --product EmbeddedActorValidation --jobs 2
 "$TIMEOUT" 120 -- "$NODE" "$VALIDATION/run-node.mjs" \
   "$SCRATCH/out/Products/Debug-webassembly-wasm32/EmbeddedActorValidation.wasm"
 
-"$TIMEOUT" 120 -- "$SWIFT" build --package-path "$VALIDATION" \
+"$TIMEOUT" 300 -- "$SWIFT" build --package-path "$VALIDATION" \
   --config-path "$CONFIG" --scratch-path "$VALIDATION/.build-wasm" \
-  --swift-sdk "$WASM_SDK_ID" --jobs 2
+  --swift-sdk "$WASM_SDK_ID" --product EmbeddedActorValidation --jobs 2
 "$TIMEOUT" 120 -- "$NODE" "$VALIDATION/run-node.mjs" \
   "$VALIDATION/.build-wasm/out/Products/Debug-webassembly-wasm32/EmbeddedActorValidation.wasm"
 ```
@@ -128,15 +155,23 @@ The Embedded run prints `clock=unavailable`; the standard WASM run prints
 
 ```text
 clock=unavailable
+generated-typed-failure=rejected(-42) success=42
+generated-typed-cancellation=cancelled
 generated-untyped-failure=remoteFailure
 typed-wire-failure=rejected(-1)
-binary-frames=client:3,server:3
+binary-frames=client:5,server:5
+generated-typed-system-failure=shuttingDown
 shutdown=terminal post-shutdown=shuttingDown
 ```
 
-The generated client method deliberately uses the package's untyped `throws`
-contract, so its application failure maps to `remoteFailure` when no error
-codec is supplied. The same generated host/result path preserves the wire
+The original Counter's generated client method has no authored error type,
+so its application failure maps to `remoteFailure` when no error codec is
+supplied. The same generated host/result path preserves the wire
 `ActorApplicationFailure`; the fixture then calls `EmbeddedActorSystem.invoke`
 with the generated `CounterError` codec to verify typed decoding at the
-explicit application boundary. These are two distinct assertions.
+explicit application boundary. The added TypedCounter supplies its generated
+error codec automatically while retaining an untyped remote wrapper. Its
+success, exact business failure, cancellation, and shutdown checks therefore
+exercise the generated method rather than a handwritten invocation. The
+Native executable emits the corresponding `native-typed-*` markers through
+the compiler-generated remote thunk and generated registration bootstrap.

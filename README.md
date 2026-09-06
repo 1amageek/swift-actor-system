@@ -78,15 +78,14 @@ to preserve the concrete error and its payload across the transport.
 
 ## Verification
 
-The checked-in fixture under `Validation/EmbeddedWASM` runs the generated host
-and client over a loopback transport using the pinned Embedded WASM SDK. The
-generated untyped-throws client path maps its application failure to
-`ActorSystemError.remoteFailure`; a separate direct
-`EmbeddedActorSystem.invoke(errorCodec:)` path decodes the typed
-`ActorApplicationFailure`. It also checks a successful generated call,
-shutdown, post-shutdown rejection, and the explicit unavailable default timer
-capability. See `Validation/EmbeddedWASM/README.md` for the exact commands and
-toolchain requirements.
+The checked-in [validation fixture](Validation/EmbeddedWASM/README.md) runs
+the authored Native actor through Swift's actual remote thunk, and the
+generated host/client through binary loopback on Standard and Embedded WASM.
+Typed-error calls verify success, exact application errors, cancellation,
+and post-shutdown system errors. The original untyped fixture separately
+retains its `remoteFailure` mapping and explicit typed codec check. Embedded
+also verifies that its default clock reports the unavailable capability.
+The fixture documents the pinned toolchain, dependency revision, and commands.
 
 ## License
 

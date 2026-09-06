@@ -76,6 +76,47 @@
         "high" : 1273564343073864120,
         "low" : 3642567731750926847
       }
+    },
+    {
+      "fields" : [
+
+      ],
+      "methods" : [
+        {
+          "canonicalSignature" : "validate(_:Int)->Int:async:throws(CounterError)",
+          "compilerTargetAliases" : [
+            {
+              "targetIdentifier" : "$s14CounterFixture05TypedA0C8validateyS2iYaKFTE",
+              "toolchainFingerprint" : "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3"
+            }
+          ],
+          "errorType" : "throws(CounterError)",
+          "methodID" : 1416151564143678790,
+          "parameters" : [
+            {
+              "fieldID" : 1,
+              "label" : "_",
+              "type" : "Int"
+            }
+          ],
+          "resultType" : "Int",
+          "sourceName" : "validate"
+        }
+      ],
+      "moduleName" : "CounterFixture",
+      "reservedFieldIDs" : [
+
+      ],
+      "schemaFingerprint" : {
+        "high" : 5587506109160745800,
+        "low" : 10624848887268035191
+      },
+      "sourcePath" : "TypedCounter.swift",
+      "sourceSymbol" : "CounterFixture.TypedCounter",
+      "typeID" : {
+        "high" : 1509062301135691500,
+        "low" : 15019379483999532233
+      }
     }
   ],
   "formatVersion" : 3,

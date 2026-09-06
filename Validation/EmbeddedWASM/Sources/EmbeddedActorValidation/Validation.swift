@@ -66,6 +66,10 @@ struct EmbeddedActorValidation {
                         transport: clientTransportID,
                         endpoint: serverEndpoint
                     ),
+                    EmbeddedActorClient.TypedCounter.actorTypeID: ActorRoute(
+                        transport: clientTransportID,
+                        endpoint: serverEndpoint
+                    ),
                 ]
             ),
             transports: [clientTransportID: clientTransport],
@@ -79,12 +83,41 @@ struct EmbeddedActorValidation {
         )
 
         let serverActor = EmbeddedActorHost.Counter(actorSystem: serverSystem)
+        let typedServerActor = EmbeddedActorHost.TypedCounter(actorSystem: serverSystem)
         try await serverSystem.start()
         try await clientSystem.start()
         let clientActor = try EmbeddedActorClient.Counter.resolve(
             id: serverActor.id,
             using: clientSystem
         )
+        let typedClientActor = try EmbeddedActorClient.TypedCounter.resolve(
+            id: typedServerActor.id,
+            using: clientSystem
+        )
+
+        let accepted = try await typedClientActor.validate(42)
+        precondition(accepted == 42)
+        do {
+            _ = try await typedClientActor.validate(-42)
+            preconditionFailure("Generated typed-throws call unexpectedly succeeded")
+        } catch let error as EmbeddedActorClient.CounterError {
+            guard case .rejected(let value) = error, value == -42 else {
+                preconditionFailure("Generated typed-throws call changed the application failure")
+            }
+            print("generated-typed-failure=rejected(-42) success=42")
+        }
+
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await typedClientActor.validate(-42)
+        }
+        do {
+            _ = try await cancelled.value
+            preconditionFailure("Cancelled typed-throws call unexpectedly succeeded")
+        } catch let error as ActorSystemError {
+            precondition(error == .cancelled)
+            print("generated-typed-cancellation=cancelled")
+        }
 
         let incremented = try await clientActor.increment(41)
         precondition(incremented == 42, "Generated actor call returned \(incremented)")
@@ -133,6 +166,14 @@ struct EmbeddedActorValidation {
 
         try await clientSystem.shutdown()
         try await serverSystem.shutdown()
+
+        do {
+            _ = try await typedClientActor.validate(42)
+            preconditionFailure("Post-shutdown typed-throws call unexpectedly succeeded")
+        } catch let error as ActorSystemError {
+            precondition(error == .shuttingDown)
+            print("generated-typed-system-failure=shuttingDown")
+        }
 
         do {
             _ = try await clientActor.increment(1)

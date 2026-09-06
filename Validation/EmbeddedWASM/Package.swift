@@ -5,7 +5,7 @@ import Foundation
 
 var embeddedLinkerSettings: [LinkerSetting] = []
 if let unicodeArchive = ProcessInfo.processInfo.environment["ACTOR_SYSTEM_UNICODE_ARCHIVE"] {
-    embeddedLinkerSettings = [.unsafeFlags(["-Xlinker", unicodeArchive])]
+    embeddedLinkerSettings = [.unsafeFlags(["-Xlinker", unicodeArchive], .when(platforms: [.wasi]))]
 }
 
 let package = Package(
@@ -16,10 +16,25 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/1amageek/swift-actor-system.git",
-            exact: "0.1.0"
+            revision: "308c56105d3203045b8633e77d983153eb3bd72c"
         ),
     ],
     targets: [
+        .executableTarget(
+            name: "CounterFixture",
+            dependencies: [
+                .product(name: "ActorSystemCore", package: "swift-actor-system"),
+                .product(name: "ActorSystemDistributed", package: "swift-actor-system"),
+                .product(name: "ActorSystemTestSupport", package: "swift-actor-system"),
+            ],
+            path: ".",
+            exclude: [
+                "README.md", "ActorSchema.lock", "run-node.mjs",
+                "Sources/EmbeddedActorHost", "Sources/EmbeddedActorClient",
+                "Sources/EmbeddedActorValidation",
+            ],
+            sources: ["Input", "Sources/NativeActorValidation"]
+        ),
         .target(
             name: "EmbeddedActorHost",
             dependencies: [
