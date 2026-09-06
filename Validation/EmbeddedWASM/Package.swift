@@ -16,7 +16,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/1amageek/swift-actor-system.git",
-            revision: "308c56105d3203045b8633e77d983153eb3bd72c"
+            revision: "082a02186280bd7e3d90db0a2e429591f7ee5420"
         ),
     ],
     targets: [

@@ -37,7 +37,8 @@ not use a library from another snapshot.
 ## Generate and build
 
 The validation package pins the public `swift-actor-system` Git revision
-`308c56105d3203045b8633e77d983153eb3bd72c`, containing the typed-error fix.
+`082a02186280bd7e3d90db0a2e429591f7ee5420`, containing the typed-error and
+task-scoped call-options fixes.
 It requires no local dependency path or edit override. This unreleased
 revision must be replaced with the corresponding version at a future release.
 
@@ -155,11 +156,12 @@ The Embedded run prints `clock=unavailable`; the standard WASM run prints
 
 ```text
 clock=unavailable
+scoped-call-options=initializer:1s, scoped:defaults
 generated-typed-failure=rejected(-42) success=42
 generated-typed-cancellation=cancelled
 generated-untyped-failure=remoteFailure
 typed-wire-failure=rejected(-1)
-binary-frames=client:5,server:5
+binary-frames=client:8,server:8
 generated-typed-system-failure=shuttingDown
 shutdown=terminal post-shutdown=shuttingDown
 ```
@@ -175,3 +177,11 @@ success, exact business failure, cancellation, and shutdown checks therefore
 exercise the generated method rather than a handwritten invocation. The
 Native executable emits the corresponding `native-typed-*` markers through
 the compiler-generated remote thunk and generated registration bootstrap.
+
+The generated client also verifies that task-scoped `.defaults` overrides its
+initializer timeout and that two simultaneously active task scopes produce
+their distinct deadlines in real invocation frames. The server is started
+inside a temporary scope; a later inbound interceptor calls a second generated
+actor and verifies that it uses its own initializer timeout, not the expired
+startup scope. Every actor system is explicitly shut down. These checks use
+manual clocks and Node WASI; they do not establish Cloudflare page-host behavior.
