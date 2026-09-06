@@ -52,6 +52,12 @@ invoke -> lookup instance -> execute -> encode result/failure
 shutdown -> stop Core -> release instances -> reject later calls
 ```
 
+For a generated Embedded host, the public actor method is an untyped remote
+entry point. A local dispatch first invokes the authored typed implementation;
+the generated target catches only its declared application error and encodes
+an `ActorApplicationFailure`. Core/system and cancellation errors leave that
+catch path unchanged and remain observable as untyped failures.
+
 ## State, Ownership, and Lifecycle
 
 The instance store owns activated actor instances and the system owns its
@@ -63,11 +69,15 @@ invocation tasks.
 
 All mutable stores use `Mutex` or actor isolation, including Embedded builds;
 `hasFeature(Embedded)` is not a synchronization decision. Application failure
-payloads remain owned byte buffers until an explicit codec decodes them.
+payloads remain owned byte buffers until an explicit codec decodes them. The
+module does not introduce a second error wrapper or reinterpret system and
+cancellation failures as application errors.
 
 ## Verification and Change Impact
 
 `Tests/ActorSystemEmbeddedTests` covers activation, registration, invocation,
-typed failure decoding, shutdown, and post-shutdown rejection. The checked-in
+typed failure decoding, shutdown, and post-shutdown rejection. Generation
+tests additionally verify typed local versus untyped remote generated
+surfaces. The checked-in
 `Validation/EmbeddedWASM` fixture additionally proves compile, link, and Node
 runtime behavior with the pinned Embedded SDK.

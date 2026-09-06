@@ -11,9 +11,10 @@ Parent: [`swift-actor-system`](../../DESIGN.md). Children: none.
 ## Responsibilities and Boundaries
 
 The module maps distributed actor operations to Core invocations and keeps
-registration/type/codec state consistent. It does not own wire framing,
-transport lifecycle, or generated source; those remain Core and Generation
-responsibilities.
+registration/type/codec state consistent. Its result handler also resolves a
+compiler-erased thrown error to the registered concrete application codec. It
+does not own wire framing, transport lifecycle, or generated source; those
+remain Core and Generation responsibilities.
 
 ## Related Designs
 
@@ -42,6 +43,12 @@ SwiftActorSystem -- registries/codecs --> ActorSystemCore
 - Codec registries are snapshotted at initialization, so later caller
   mutation cannot alter the wire contract.
 - Actor identity and schema values are stable for the lifetime of a system.
+- A typed application error remains an `ActorApplicationFailure` even when
+  Swift invokes the result handler with an `any Error` static type: the handler
+  uses the error's concrete runtime type to select the registered codec. An
+  unregistered application error keeps the existing `.remoteFailure`
+  fallback, and Core system/cancellation failures are not reclassified as
+  application payloads.
 
 ## Runtime Flows
 
@@ -63,10 +70,14 @@ termination.
 Registration and local actor state are protected by `Mutex` or actor-owned
 state. Distributed invocation preserves the distinction between system
 failure, remote failure, and an explicitly codec-decoded application failure.
-The module does not infer an Embedded timer or thread model.
+The module does not infer an Embedded timer or thread model. The result
+handler must not use the erased static `Failure.self` as the concrete codec
+key, because that would turn a registered typed application error into a
+remote failure.
 
 ## Verification and Change Impact
 
 `Tests/ActorSystemDistributedTests` covers execution, registration, codec
-lookups, duplicate ownership, and shutdown paths. Changes to distributed
-mapping require those tests plus Core and Embedded generated validation.
+lookups, duplicate ownership, shutdown paths, and compiler-erased typed-error
+handling. Changes to distributed mapping require those tests plus Core and
+Embedded generated validation.

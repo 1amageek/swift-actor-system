@@ -93,7 +93,6 @@ public enum ActorSystemCompiler {
             includingActorSymbols: request.includedActorSymbols,
             targetEnvironment: request.targetEnvironment
         )
-        try ActorMethodEffectValidator.validatePortableActorContract(actors)
         let rootValueTypes = Set(actors.flatMap { actor in
             actor.methods.flatMap { method in
                 method.parameters.map(\.type)

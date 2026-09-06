@@ -70,9 +70,11 @@ actor source + pinned swiftc
 
 The `embeddedHost` and `embeddedClient` profiles replace the distributed actor
 declaration with generated Embedded actors and generated portable codecs. The
-portable contract currently accepts untyped `throws`; typed application
-failures are represented by `ActorApplicationFailure` and decoded at the
-application boundary with `EmbeddedActorErrorCodec`.
+portable contract accepts untyped `throws` and `throws(ErrorType)` when the
+error type has a portable schema. Authored Native/local effects are retained;
+remote calls remain untyped so transport, cancellation, and system failures
+can propagate. Generated typed-error calls use the existing application codec
+to preserve the concrete error and its payload across the transport.
 
 ## Verification
 

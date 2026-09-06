@@ -19,6 +19,11 @@ transport contracts, source schema locks, generated codecs, and target
 projections. It does not own a network protocol implementation, a platform
 timer, a WebSocket implementation, or application actor business state.
 
+Generated projections preserve an authored typed method effect where the
+language projection requires it, while every runtime remote call keeps an
+untyped system-error boundary so system and cancellation failures remain
+representable alongside an application failure.
+
 `ActorSystemCore` is the authority for lifecycle and call state. Transports
 only deliver `ActorFrame` values and report stream/lifecycle events. Generated
 source owns the target-specific actor surface; it does not replace Core's
@@ -64,6 +69,12 @@ ActorSystemCore
 - `ActorApplicationFailure` remains distinct from system failure across the
   invocation and result paths; an application boundary may decode it with an
   explicit typed codec.
+- An authored `throws(ErrorType)` is accepted only when `ErrorType` is in the
+  exported portable schema. Native/local generated dispatch keeps that typed
+  signature. Standard client declarations retain the authored effect for
+  compiler target identity, while their generated remote call path and
+  Embedded remote entry points preserve untyped system and cancellation
+  failures.
 - Mutable lifecycle, directory, registration, transport, and scheduler state
   is protected by its owner `Mutex` or actor on every target. Embedded feature
   detection never removes this isolation.

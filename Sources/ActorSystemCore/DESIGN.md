@@ -39,6 +39,10 @@ ActorDirectory + ActorRouter + ActorTransport
 - Frame version, schema, target, method, payload bounds, and lifecycle phase
   are validated before execution.
 - `ActorApplicationFailure` is not converted into a successful result.
+- Core receives generated target failures through its untyped error boundary.
+  A typed authored application error is encoded as `ActorApplicationFailure`
+  by generated Embedded host dispatch or the Distributed result handler;
+  Core keeps that payload distinct from `ActorSystemError` and cancellation.
 - Mutable registries and lifecycle state use `Mutex` or an actor on every
   target; no Embedded condition removes the isolation boundary.
 - Binary payload storage is retained by `ActorByteBuffer`; views do not escape
@@ -61,9 +65,12 @@ critical sections so user deinitializers can re-enter public APIs safely.
 ## Failure, Concurrency, and Constraints
 
 `ActorSystemError` represents system failure and `ActorApplicationFailure`
-represents a typed application payload. No `await`, transport call, or external
-callback occurs inside a `Mutex.withLock` critical section. A deadline uses the
-injected `ActorClock`; Embedded's unavailable default is a typed capability.
+represents a typed application payload. Core does not define or add an error
+wrapper for authored typed throws; it preserves the explicit application
+payload and propagates system and cancellation failures without conflation. No
+`await`, transport call, or external callback occurs inside a
+`Mutex.withLock` critical section. A deadline uses the injected `ActorClock`;
+Embedded's unavailable default is a typed capability.
 
 ## Verification and Change Impact
 

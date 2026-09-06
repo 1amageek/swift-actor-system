@@ -18,9 +18,13 @@ public struct ActorDistributedResultHandler: DistributedTargetInvocationResultHa
     }
 
     public func onThrow<Failure>(error: Failure) async throws where Failure: Error {
+        // Swift's distributed target executor may erase a typed application
+        // error to `any Error` before invoking this handler. Resolve the
+        // concrete runtime type so a registered application codec is retained.
+        let concreteType = Swift.type(of: error as any Error)
         guard let encoded = try registry.encodeDynamicIfRegistered(
             error,
-            swiftType: Failure.self
+            swiftType: concreteType
         ) else {
             try await store.store(
                 .systemFailure(

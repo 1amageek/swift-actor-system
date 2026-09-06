@@ -12,7 +12,6 @@ public enum ActorSchemaReconciler {
         sourceRoot: URL? = nil,
         existing: ActorSchemaLock
     ) throws -> ActorSchemaLock {
-        try ActorMethodEffectValidator.validatePortableActorContract(actors)
         guard existing.packageIdentity == packageIdentity else {
             throw ActorGenerationError.schemaConflict(reason: "Package identity does not match the schema lock")
         }

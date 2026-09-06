@@ -331,8 +331,11 @@ struct ActorSchemaGenerationTests {
                     fallback
                 }
 
-                distributed func increment(by amount: Int) async throws -> Int {
-                    amount
+                distributed func increment(by amount: Int) async throws(CounterError) -> Int {
+                    if amount < 0 {
+                        throw .rejected
+                    }
+                    return amount
                 }
             }
             """
@@ -367,7 +370,7 @@ struct ActorSchemaGenerationTests {
         )
 
         #expect(client.contents.contains("distributed func current(_ fallback: Int = 0) -> Int"))
-        #expect(client.contents.contains("distributed func increment(by amount: Int) async throws -> Int"))
+        #expect(client.contents.contains("distributed func increment(by amount: Int) async throws(CounterError) -> Int"))
         #expect(client.contents.contains("import SwiftWebActors"))
         #expect(client.contents.contains("public typealias ActorSystem = SwiftWebActors.WebActorSystem"))
         #expect(!client.contents.contains("import ServerOnlyKit"))
@@ -378,11 +381,11 @@ struct ActorSchemaGenerationTests {
         let actor = try #require(actors.first)
         let methods = actor.methods
         #expect(methods.contains { $0.canonicalSignature.contains(":sync:nothrow") })
-        #expect(methods.contains { $0.canonicalSignature.contains(":async:throws") })
+        #expect(methods.contains { $0.canonicalSignature.contains(":async:throws(CounterError)") })
     }
 
     @Test
-    func standardClientGenerationRejectsTypedThrows() throws {
+    func standardClientAcceptsPortableTypedThrowsAndPreservesSchemaIdentity() throws {
         let source = try TemporarySource(
             """
             import Distributed
@@ -405,20 +408,32 @@ struct ActorSchemaGenerationTests {
             sourceFiles: [source.url],
             moduleName: "Fixture"
         )
+        let portableTypes = try ActorPortableTypeScanner.scan(
+            sourceFiles: [source.url],
+            moduleName: "Fixture"
+        )
+        let schema = try reconcile(source: source.url, existing: .init(packageIdentity: "fixture"))
+        let lockedActor = try #require(schema.actors.first)
+        let lockedMethod = try #require(lockedActor.methods.first)
+        #expect(lockedMethod.errorType == "throws(CounterError)")
+        #expect(lockedMethod.canonicalSignature.contains(":async:throws(CounterError)"))
 
-        expectTypedThrowsRejection(symbol: "Fixture.Counter.increment") {
-            _ = try ActorSourceGenerator.generate(
-                actors: actors,
-                portableTypes: [],
-                schema: ActorSchemaLock(
-                    packageIdentity: "fixture",
-                    moduleName: "Fixture"
-                ),
-                toolchainFingerprint: "fixture-toolchain",
-                profile: .standardClient,
-                targetEnvironment: try generationEnvironment(for: .standardClient)
-            )
-        }
+        let unchanged = try reconcile(source: source.url, existing: schema)
+        #expect(unchanged == schema)
+
+        let generated = try ActorSourceGenerator.generate(
+            actors: actors,
+            portableTypes: portableTypes,
+            schema: schema,
+            toolchainFingerprint: "fixture-toolchain",
+            profile: .standardClient,
+            targetEnvironment: try generationEnvironment(for: .standardClient)
+        )
+        let client = try #require(
+            generated.first { $0.relativePath == "StandardClient/Counter.client.generated.swift" }
+        )
+        #expect(client.contents.contains("distributed func increment() async throws(CounterError) -> Int"))
+        #expect(!client.contents.contains("ActorApplicationFailure"))
     }
 
     @Test
@@ -571,7 +586,7 @@ struct ActorSchemaGenerationTests {
     }
 
     @Test
-    func typedThrowsFailsBeforeSchemaReconciliation() throws {
+    func typedThrowsRequiresPortableErrorSchema() throws {
         let source = try TemporarySource(
             """
             import Distributed
@@ -595,30 +610,30 @@ struct ActorSchemaGenerationTests {
             moduleName: "Fixture"
         )
 
-        expectTypedThrowsRejection(symbol: "Fixture.Counter.increment") {
+        do {
             try ActorPortabilityValidator.validate(
                 actors: actors,
                 portableTypes: [],
                 dependencySchemas: []
             )
+            Issue.record("Expected a typed error without a portable schema to be rejected")
+        } catch ActorGenerationError.unsupportedDeclaration(let symbol, let reason) {
+            #expect(symbol == "Fixture.Counter.increment")
+            #expect(reason.contains("CounterError is outside the portable value set"))
         }
-        expectTypedThrowsRejection(symbol: "Fixture.Counter.increment") {
-            _ = try ActorSchemaReconciler.reconcile(
-                actors: actors,
-                packageIdentity: "fixture",
-                moduleName: "Fixture",
-                toolchainFingerprint: "fixture-toolchain",
-                compilerTargets: [],
-                existing: ActorSchemaLock(
-                    packageIdentity: "fixture",
-                    moduleName: "Fixture"
-                )
-            )
-        }
+
+        let portableTypes = try ActorPortableTypeScanner.scan(
+            sourceFiles: [source.url],
+            moduleName: "Fixture"
+        )
+        let schema = try reconcile(source: source.url, existing: .init(packageIdentity: "fixture"))
+        let method = try #require(schema.actors.first?.methods.first)
+        #expect(method.errorType == "throws(CounterError)")
+        #expect(portableTypes.contains { $0.name == "CounterError" })
     }
 
     @Test
-    func embeddedGenerationRejectsTypedThrows() throws {
+    func embeddedGenerationPreservesTypedLocalAndUntypedRemoteSurfaces() throws {
         let source = try TemporarySource(
             """
             import Distributed
@@ -645,20 +660,136 @@ struct ActorSchemaGenerationTests {
             sourceFiles: [source.url],
             moduleName: "Fixture"
         )
-        for profile in [ActorGenerationProfile.embeddedHost, .embeddedClient] {
-            expectTypedThrowsRejection(symbol: "Fixture.Counter.increment") {
-                _ = try ActorSourceGenerator.generate(
-                    actors: actors,
-                    portableTypes: [],
-                    schema: ActorSchemaLock(
-                        packageIdentity: "fixture",
-                        moduleName: "Fixture"
-                    ),
-                    toolchainFingerprint: "fixture-toolchain",
-                    profile: profile,
-                    targetEnvironment: try generationEnvironment(for: profile)
-                )
+        let portableTypes = try ActorPortableTypeScanner.scan(
+            sourceFiles: [source.url],
+            moduleName: "Fixture"
+        )
+        let schema = try reconcile(source: source.url, existing: .init(packageIdentity: "fixture"))
+        let descriptor = try ActorSourceGenerator.generate(
+            actors: actors,
+            portableTypes: portableTypes,
+            schema: schema,
+            toolchainFingerprint: "fixture-toolchain",
+            profile: .embeddedClient,
+            targetEnvironment: try generationEnvironment(for: .embeddedClient)
+        ).first { $0.relativePath == "ActorSchema.generated.swift" }
+        #expect(descriptor?.contents.contains("errorTypeID: ActorTypeID") == true)
+
+        let hostGenerated = try ActorSourceGenerator.generate(
+            actors: actors,
+            portableTypes: portableTypes,
+            schema: schema,
+            toolchainFingerprint: "fixture-toolchain",
+            profile: .embeddedHost,
+            targetEnvironment: try generationEnvironment(for: .embeddedHost)
+        )
+        let host = try #require(
+            hostGenerated.first { $0.relativePath == "EmbeddedHost/Counter.generated.swift" }
+        )
+        #expect(host.contents.contains("internal nonisolated func increment() async throws -> Int"))
+        #expect(host.contents.contains("fileprivate func _invokeLocally_"))
+        #expect(host.contents.contains("async throws(CounterError) -> Int"))
+        #expect(host.contents.contains("catch let error as CounterError"))
+        #expect(host.contents.contains("throw ActorApplicationFailure("))
+        #expect(host.contents.contains("payload: try error.encodeActorValue()"))
+
+        let clientGenerated = try ActorSourceGenerator.generate(
+            actors: actors,
+            portableTypes: portableTypes,
+            schema: schema,
+            toolchainFingerprint: "fixture-toolchain",
+            profile: .embeddedClient,
+            targetEnvironment: try generationEnvironment(for: .embeddedClient)
+        )
+        let client = try #require(
+            clientGenerated.first { $0.relativePath == "EmbeddedClient/Counter.generated.swift" }
+        )
+        #expect(client.contents.contains("internal nonisolated func increment() async throws -> Int"))
+        #expect(client.contents.contains("ActorGeneratedCodec<CounterError>.portable()"))
+        #expect(!client.contents.contains("throws(CounterError)"))
+        #expect(!client.contents.contains("ActorApplicationFailure"))
+    }
+
+    @Test
+    func typedThrowsWithNonportableErrorRemainsAnExplicitPortabilityFailure() throws {
+        let source = try TemporarySource(
+            """
+            import Distributed
+
+            distributed actor Counter {
+                typealias ActorSystem = TestActorSystem
+
+                distributed func increment() async throws(UnsupportedError) -> Int {
+                    1
+                }
             }
+            """
+        )
+        defer { source.remove() }
+        let actors = try ActorSourceScanner.scan(
+            sourceFiles: [source.url],
+            moduleName: "Fixture"
+        )
+        do {
+            try ActorPortabilityValidator.validate(
+                actors: actors,
+                portableTypes: [],
+                dependencySchemas: []
+            )
+            Issue.record("Expected the non-portable typed error to be rejected")
+        } catch ActorGenerationError.unsupportedDeclaration(let symbol, let reason) {
+            #expect(symbol == "Fixture.Counter.increment")
+            #expect(reason.contains("UnsupportedError is outside the portable value set"))
+        }
+    }
+
+    @Test
+    func embeddedGenerationAcceptsTypedThrowsWithPortableErrorSchema() throws {
+        let source = try TemporarySource(
+            """
+            import Distributed
+
+            enum CounterError: Error, Codable {
+                case rejected(Int)
+            }
+
+            distributed actor Counter {
+                typealias ActorSystem = TestActorSystem
+
+                init(actorSystem: ActorSystem) {
+                    self.actorSystem = actorSystem
+                }
+
+                distributed func increment() async throws(CounterError) -> Int {
+                    throw .rejected(1)
+                }
+            }
+            """
+        )
+        defer { source.remove() }
+        let actors = try ActorSourceScanner.scan(
+            sourceFiles: [source.url],
+            moduleName: "Fixture"
+        )
+        let portableTypes = try ActorPortableTypeScanner.scan(
+            sourceFiles: [source.url],
+            moduleName: "Fixture"
+        )
+        let schema = try reconcile(source: source.url, existing: .init(packageIdentity: "fixture"))
+        for profile in [ActorGenerationProfile.embeddedHost, .embeddedClient] {
+            let generated = try ActorSourceGenerator.generate(
+                actors: actors,
+                portableTypes: portableTypes,
+                schema: schema,
+                toolchainFingerprint: "fixture-toolchain",
+                profile: profile,
+                targetEnvironment: try generationEnvironment(for: profile)
+            )
+            let actorSource = try #require(
+                generated.first { $0.relativePath.contains("Counter.generated.swift") }
+            )
+            #expect(actorSource.contents.contains("async throws -> Int"))
+            #expect(actorSource.contents.contains("throws(CounterError)" ) == (profile == .embeddedHost))
         }
     }
 
@@ -1272,21 +1403,6 @@ struct ActorSchemaGenerationTests {
                 moduleName: moduleName
             )
         )
-    }
-
-    private func expectTypedThrowsRejection(
-        symbol expectedSymbol: String,
-        _ operation: () throws -> Void
-    ) {
-        do {
-            try operation()
-            Issue.record("Expected the portable actor contract to reject typed throws")
-        } catch ActorGenerationError.unsupportedDeclaration(let symbol, let reason) {
-            #expect(symbol == expectedSymbol)
-            #expect(reason == ActorMethodEffectValidator.typedThrowsReason)
-        } catch {
-            Issue.record("Unexpected typed throws validation error: \(error)")
-        }
     }
 
     private func generationEnvironment(

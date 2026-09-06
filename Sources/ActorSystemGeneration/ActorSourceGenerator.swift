@@ -13,7 +13,6 @@ public enum ActorSourceGenerator {
         distributedActorSystemTypeName: String = "SwiftActorSystem"
     ) throws -> [GeneratedActorSource] {
         try validateTargetEnvironment(targetEnvironment, profile: profile)
-        try ActorMethodEffectValidator.validatePortableActorContract(actors)
         if profile == .embeddedHost {
             try validateEmbeddedHostPortability(
                 actors: actors,
@@ -891,7 +890,7 @@ public enum ActorSourceGenerator {
         guard let entry = valueEntry(for: errorType, in: valueEntries) else {
             throw ActorGenerationError.missingSchemaEntry(symbol: errorType)
         }
-        return ",\n            errorCodec: EmbeddedActorErrorCodec(typeID: ActorTypeID(high: \(entry.typeID.high), low: \(entry.typeID.low)), codec: .portable())"
+        return ",\n            errorCodec: EmbeddedActorErrorCodec(typeID: ActorTypeID(high: \(entry.typeID.high), low: \(entry.typeID.low)), codec: ActorGeneratedCodec<\(errorType)>.portable())"
     }
 
     private static func valueEntry(

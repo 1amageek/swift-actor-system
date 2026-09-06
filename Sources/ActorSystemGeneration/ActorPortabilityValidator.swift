@@ -7,7 +7,6 @@ public enum ActorPortabilityValidator {
         portableTypes: [ActorPortableTypeModel],
         dependencySchemas: [ActorSchemaLock]
     ) throws {
-        try ActorMethodEffectValidator.validatePortableActorContract(actors)
         let localTypes = Set(portableTypes.flatMap { [$0.name, $0.symbol] })
         let dependencyTypes = Set(
             dependencySchemas.flatMap { schema in

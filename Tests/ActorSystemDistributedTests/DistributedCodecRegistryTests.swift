@@ -62,6 +62,40 @@ struct DistributedCodecRegistryTests {
     }
 
     @Test
+    func erasedTypedThrownErrorUsesItsRegisteredConcreteCodec() async throws {
+        let registry = ActorDistributedCodecRegistry()
+        let typeID = ActorTypeID(high: 7, low: 8)
+        try registry.register(
+            FirstFixtureFailure.self,
+            typeID: typeID,
+            codec: ActorGeneratedCodec(
+                encode: { _ in ActorByteBuffer([1]) },
+                decode: { _ in FirstFixtureFailure.failed }
+            )
+        )
+        let store = ActorDistributedResultStore()
+        let handler = ActorDistributedResultHandler(registry: registry, store: store)
+        let erased: any Error = FirstFixtureFailure.failed
+
+        try await forwardErased(
+            (any Error).self,
+            error: erased,
+            to: handler
+        )
+
+        guard case .applicationFailure(let failure) = await store.take() else {
+            Issue.record("Expected a registered erased application error")
+            return
+        }
+        #expect(failure.typeID == typeID)
+        let decoded = try registry.decodeError(FirstFixtureFailure.self, from: failure)
+        guard case .failed = decoded else {
+            Issue.record("Registered application error decoded to the wrong case")
+            return
+        }
+    }
+
+    @Test
     func aliasTableRequiresOneToOneCompilerMapping() throws {
         #expect(throws: ActorSystemError.self) {
             _ = try ActorTargetAliasTable(
@@ -407,6 +441,15 @@ struct DistributedCodecRegistryTests {
 
         try system.registerBootstrap(FirstOwnerBootstrap.self)
     }
+}
+
+private func forwardErased<Failure: Error>(
+    _ failureType: Failure.Type,
+    error: Failure,
+    to handler: ActorDistributedResultHandler
+) async throws {
+    _ = failureType
+    try await handler.onThrow(error: error)
 }
 
 private enum FirstFixtureFailure: Error, Codable, Sendable {
