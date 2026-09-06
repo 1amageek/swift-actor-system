@@ -1,0 +1,162 @@
+{
+  "actors" : [
+    {
+      "fields" : [
+
+      ],
+      "methods" : [
+        {
+          "canonicalSignature" : "increment(_:Int)->Int:async:throws",
+          "compilerTargetAliases" : [
+            {
+              "targetIdentifier" : "$s14CounterFixture0A0C9incrementyS2iYaKFTE",
+              "toolchainFingerprint" : "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3"
+            }
+          ],
+          "errorType" : "throws",
+          "methodID" : 9185592791354217434,
+          "parameters" : [
+            {
+              "fieldID" : 1,
+              "label" : "_",
+              "type" : "Int"
+            }
+          ],
+          "resultType" : "Int",
+          "sourceName" : "increment"
+        },
+        {
+          "canonicalSignature" : "reject()->CounterError:async:throws",
+          "compilerTargetAliases" : [
+            {
+              "targetIdentifier" : "$s14CounterFixture0A0C6rejectAA0A5ErrorOyYaKFTE",
+              "toolchainFingerprint" : "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3"
+            }
+          ],
+          "errorType" : "throws",
+          "methodID" : 18397614679172336117,
+          "parameters" : [
+
+          ],
+          "resultType" : "CounterError",
+          "sourceName" : "reject"
+        },
+        {
+          "canonicalSignature" : "validate(_:Int)->CounterError:async:throws",
+          "compilerTargetAliases" : [
+            {
+              "targetIdentifier" : "$s14CounterFixture0A0C8validateyAA0A5ErrorOSiYaKFTE",
+              "toolchainFingerprint" : "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3"
+            }
+          ],
+          "errorType" : "throws",
+          "methodID" : 7628941362854232182,
+          "parameters" : [
+            {
+              "fieldID" : 1,
+              "label" : "_",
+              "type" : "Int"
+            }
+          ],
+          "resultType" : "CounterError",
+          "sourceName" : "validate"
+        }
+      ],
+      "moduleName" : "CounterFixture",
+      "reservedFieldIDs" : [
+
+      ],
+      "schemaFingerprint" : {
+        "high" : 541993513410613368,
+        "low" : 14780909217542817265
+      },
+      "sourcePath" : "Counter.swift",
+      "sourceSymbol" : "CounterFixture.Counter",
+      "typeID" : {
+        "high" : 1273564343073864120,
+        "low" : 3642567731750926847
+      }
+    }
+  ],
+  "formatVersion" : 3,
+  "moduleName" : "CounterFixture",
+  "packageIdentity" : "embedded-actor-validation",
+  "reservedActorTypeIDs" : [
+
+  ],
+  "reservedMethodIDs" : [
+
+  ],
+  "reservedValueTypeIDs" : [
+
+  ],
+  "valueTypes" : [
+    {
+      "canonicalType" : "CounterFixture.CounterError",
+      "cases" : [
+        {
+          "associatedValues" : [
+            {
+              "fieldID" : 1,
+              "label" : "_",
+              "type" : "Int"
+            }
+          ],
+          "caseID" : 1,
+          "reservedAssociatedValueFieldIDs" : [
+
+          ],
+          "sourceName" : "accepted"
+        },
+        {
+          "associatedValues" : [
+            {
+              "fieldID" : 1,
+              "label" : "_",
+              "type" : "Int"
+            }
+          ],
+          "caseID" : 2,
+          "reservedAssociatedValueFieldIDs" : [
+
+          ],
+          "sourceName" : "rejected"
+        }
+      ],
+      "fields" : [
+
+      ],
+      "reservedCaseIDs" : [
+
+      ],
+      "reservedFieldIDs" : [
+
+      ],
+      "sourceType" : "CounterError",
+      "typeID" : {
+        "high" : 10033138577471328340,
+        "low" : 3038637286077199023
+      }
+    },
+    {
+      "canonicalType" : "Swift.Int",
+      "cases" : [
+
+      ],
+      "fields" : [
+
+      ],
+      "reservedCaseIDs" : [
+
+      ],
+      "reservedFieldIDs" : [
+
+      ],
+      "sourceType" : "Int",
+      "typeID" : {
+        "high" : 17136416053037652511,
+        "low" : 11586992519881825816
+      }
+    }
+  ]
+}

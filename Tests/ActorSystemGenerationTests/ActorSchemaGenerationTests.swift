@@ -422,6 +422,56 @@ struct ActorSchemaGenerationTests {
     }
 
     @Test
+    func portableEnumCodecBindsAssociatedValuesInGeneratedSwitches() throws {
+        let source = try TemporarySource(
+            """
+            import Distributed
+
+            enum CounterError: Error, Codable {
+                case accepted(Int)
+                case rejected(Int)
+            }
+
+            distributed actor Counter {
+                typealias ActorSystem = TestActorSystem
+
+                distributed func validate() async throws -> CounterError {
+                    .accepted(1)
+                }
+            }
+            """
+        )
+        defer { source.remove() }
+
+        let actors = try ActorSourceScanner.scan(
+            sourceFiles: [source.url],
+            moduleName: "Fixture"
+        )
+        let portableTypes = try ActorPortableTypeScanner.scan(
+            sourceFiles: [source.url],
+            moduleName: "Fixture"
+        )
+        let schema = try reconcile(
+            source: source.url,
+            existing: ActorSchemaLock(packageIdentity: "fixture")
+        )
+        let generated = try ActorSourceGenerator.generate(
+            actors: actors,
+            portableTypes: portableTypes,
+            schema: schema,
+            toolchainFingerprint: "fixture-toolchain",
+            profile: .embeddedClient,
+            targetEnvironment: try generationEnvironment(for: .embeddedClient)
+        )
+        let codecs = try #require(
+            generated.first { $0.relativePath == "ActorCodecs.generated.swift" }
+        )
+
+        #expect(codecs.contents.contains("case .accepted(let value0):"))
+        #expect(codecs.contents.contains("case .rejected(let value0):"))
+    }
+
+    @Test
     func removedFieldAndEnumCaseIDsStayReserved() throws {
         let firstSource = """
         import Distributed

@@ -1,0 +1,14 @@
+.build/
+.build-*/
+.swiftpm/
+.swiftpm-*/
+*.xcworkspace/xcuserdata/
+Validation/EmbeddedWASM/.build/
+Validation/EmbeddedWASM/.build-*/
+Validation/EmbeddedWASM/.generated/
+Validation/EmbeddedWASM/Package.resolved
+Validation/EmbeddedWASM/.swiftpm-*/
+Validation/EmbeddedWASM/Sources/EmbeddedActorHost/ActorGeneratedManifest.json
+Validation/EmbeddedWASM/Sources/EmbeddedActorHost/.actor-system-generated-files.json
+Validation/EmbeddedWASM/Sources/EmbeddedActorClient/ActorGeneratedManifest.json
+Validation/EmbeddedWASM/Sources/EmbeddedActorClient/.actor-system-generated-files.json

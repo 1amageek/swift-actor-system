@@ -842,7 +842,7 @@ public enum ActorSourceGenerator {
         lines.append("        switch self {")
         for schemaCase in entry.cases {
             let modelCase = cases.first(where: { $0.name == schemaCase.sourceName })
-            let bindings = (modelCase?.associatedValues ?? []).indices.map { "value\($0)" }
+            let bindings = (modelCase?.associatedValues ?? []).indices.map { "let value\($0)" }
             lines.append("        case .\(schemaCase.sourceName)\(bindings.isEmpty ? "" : "(" + bindings.joined(separator: ", ") + ")"):")
             lines.append("            caseID = \(schemaCase.caseID)")
             for (index, parameter) in schemaCase.associatedValues.enumerated() {
