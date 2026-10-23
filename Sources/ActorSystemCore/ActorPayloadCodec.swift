@@ -81,11 +81,8 @@ public struct ActorPayloadEncoder: Sendable {
     }
 
     public mutating func append(_ value: Bool, field: ActorFieldID) throws {
-        try append(
-            field: field,
-            wireType: .boolean,
-            payload: ActorByteBuffer([value ? 1 : 0])
-        )
+        try appendHeader(field: field, wireType: .boolean, byteCount: 1)
+        storage.append(value ? 1 : 0)
     }
 
     public mutating func append<T: FixedWidthInteger & SignedInteger>(
@@ -121,11 +118,8 @@ public struct ActorPayloadEncoder: Sendable {
     }
 
     public mutating func append(_ value: String, field: ActorFieldID) throws {
-        try append(
-            field: field,
-            wireType: .string,
-            payload: ActorByteBuffer(Array(value.utf8))
-        )
+        try appendHeader(field: field, wireType: .string, byteCount: value.utf8.count)
+        storage.append(contentsOf: value.utf8)
     }
 
     public mutating func append(
@@ -161,17 +155,11 @@ public struct ActorPayloadEncoder: Sendable {
         associatedValues: ActorByteBuffer,
         field: ActorFieldID
     ) throws {
-        var payload: [UInt8] = []
-        payload.reserveCapacity(4 + associatedValues.count)
-        appendBigEndian(caseID, to: &payload)
-        associatedValues.withUnsafeBytes { bytes in
-            payload.append(contentsOf: bytes)
-        }
-        try append(
-            field: field,
-            wireType: .enumeration,
-            payload: ActorByteBuffer(payload)
-        )
+        let (byteCount, overflow) = associatedValues.count.addingReportingOverflow(4)
+        guard !overflow else { throw ActorSystemError.encodingFailed }
+        try appendHeader(field: field, wireType: .enumeration, byteCount: byteCount)
+        appendBigEndian(caseID, to: &storage)
+        associatedValues.withUnsafeBytes { storage.append(contentsOf: $0) }
     }
 
     public func finish() -> ActorByteBuffer {
@@ -186,34 +174,26 @@ public struct ActorPayloadEncoder: Sendable {
         try append(field: field, wireType: wireType, payload: payload)
     }
 
-    private mutating func append<T: FixedWidthInteger>(
-        _ value: T,
-        field: ActorFieldID,
-        wireType: ActorWireType
-    ) throws {
-        var payload: [UInt8] = []
-        payload.reserveCapacity(MemoryLayout<T>.size)
-        var shift = (MemoryLayout<T>.size - 1) * 8
-        while shift >= 0 {
-            payload.append(UInt8(truncatingIfNeeded: value >> T(shift)))
-            if shift == 0 {
-                break
-            }
-            shift -= 8
-        }
-        try append(
-            field: field,
-            wireType: wireType,
-            payload: ActorByteBuffer(payload)
-        )
-    }
-
     private mutating func appendFixedWidth<T: FixedWidthInteger>(
         _ value: T,
         field: ActorFieldID,
         wireType: ActorWireType
     ) throws {
-        try append(value, field: field, wireType: wireType)
+        try appendHeader(field: field, wireType: wireType, byteCount: MemoryLayout<T>.size)
+        appendBigEndian(value, to: &storage)
+    }
+
+    private mutating func appendHeader(
+        field: ActorFieldID,
+        wireType: ActorWireType,
+        byteCount: Int
+    ) throws {
+        guard let payloadCount = UInt32(exactly: byteCount) else {
+            throw ActorSystemError.encodingFailed
+        }
+        appendBigEndian(field.rawValue, to: &storage)
+        storage.append(wireType.rawValue)
+        appendBigEndian(payloadCount, to: &storage)
     }
 
     private mutating func append(
@@ -221,12 +201,7 @@ public struct ActorPayloadEncoder: Sendable {
         wireType: ActorWireType,
         payload: ActorByteBuffer
     ) throws {
-        guard let payloadCount = UInt32(exactly: payload.count) else {
-            throw ActorSystemError.encodingFailed
-        }
-        appendBigEndian(field.rawValue, to: &storage)
-        storage.append(wireType.rawValue)
-        appendBigEndian(payloadCount, to: &storage)
+        try appendHeader(field: field, wireType: wireType, byteCount: payload.count)
         payload.withUnsafeBytes { bytes in
             storage.append(contentsOf: bytes)
         }
@@ -319,11 +294,10 @@ public struct ActorPayloadDecoder: Sendable {
         guard buffer.count - index >= 4 else {
             throw ActorSystemError.decodingFailed
         }
-        var value: UInt32 = 0
-        for _ in 0..<4 {
-            value = (value << 8) | UInt32(buffer[index])
-            index += 1
+        let value = buffer.withRawSpan {
+            UInt32(bigEndian: $0.load(fromByteOffset: index, as: UInt32.self))
         }
+        index += 4
         return value
     }
 }
@@ -482,22 +456,18 @@ public struct ActorFieldView: Sendable {
         guard range.count >= 4 else {
             throw ActorSystemError.decodingFailed
         }
-        var value: UInt32 = 0
-        for index in range.lowerBound..<(range.lowerBound + 4) {
-            value = (value << 8) | UInt32(owner[index])
+        return owner.withRawSpan {
+            UInt32(bigEndian: $0.load(fromByteOffset: range.lowerBound, as: UInt32.self))
         }
-        return value
     }
 
     private func readUInt64() throws -> UInt64 {
         guard range.count == 8 else {
             throw ActorSystemError.decodingFailed
         }
-        var value: UInt64 = 0
-        for index in range {
-            value = (value << 8) | UInt64(owner[index])
+        return owner.withRawSpan {
+            UInt64(bigEndian: $0.load(fromByteOffset: range.lowerBound, as: UInt64.self))
         }
-        return value
     }
 }
 

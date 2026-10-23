@@ -447,24 +447,28 @@ private struct ByteReader {
     }
 
     mutating func readUInt16() throws -> UInt16 {
-        let first = UInt16(try readByte())
-        let second = UInt16(try readByte())
-        return (first << 8) | second
+        try readInteger(UInt16.self)
     }
 
     mutating func readUInt32() throws -> UInt32 {
-        var value: UInt32 = 0
-        for _ in 0..<4 {
-            value = (value << 8) | UInt32(try readByte())
-        }
-        return value
+        try readInteger(UInt32.self)
     }
 
     mutating func readUInt64() throws -> UInt64 {
-        var value: UInt64 = 0
-        for _ in 0..<8 {
-            value = (value << 8) | UInt64(try readByte())
+        try readInteger(UInt64.self)
+    }
+
+    private mutating func readInteger<Value: FixedWidthInteger & ConvertibleFromBytes>(
+        _ type: Value.Type
+    ) throws -> Value {
+        let byteCount = MemoryLayout<Value>.size
+        guard remaining >= byteCount else {
+            throw ActorSystemError.invalidFrame(ActorProtocolViolation("Frame integer is truncated"))
         }
+        let value = buffer.withRawSpan {
+            Value(bigEndian: $0.load(fromByteOffset: index, as: Value.self))
+        }
+        index += byteCount
         return value
     }
 

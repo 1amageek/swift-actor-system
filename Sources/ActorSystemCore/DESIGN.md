@@ -47,7 +47,16 @@ ActorDirectory + ActorRouter + ActorTransport
 - Mutable registries and lifecycle state use `Mutex` or an actor on every
   target; no Embedded condition removes the isolation boundary.
 - Binary payload storage is retained by `ActorByteBuffer`; views do not escape
-  their owner.
+  their owner. `withRawSpan` lends only the readable range to a synchronous
+  closure. The span cannot escape that borrow; storage remains immutable and
+  retained across the closure. Unsafe pointer-to-span conversion is confined
+  to this boundary and uses the storage protocol's initialized contiguous
+  memory contract. Bounds are checked before integer loads so malformed input
+  still throws typed codec errors rather than trapping.
+- Integer and string encoding appends header and bytes to one destination;
+  enum encoding appends its case ID and retained associated payload directly.
+  Wire order and widths are unchanged. `finish()` preserves snapshot semantics
+  when the encoder is subsequently mutated.
 - `ActorCallOptions.withValue(_:operation:)` installs an immutable task-local
   value for the duration of one asynchronous operation. Presence of the scope,
   rather than a non-`nil` timeout, determines precedence, so `.defaults`
@@ -108,3 +117,14 @@ Core-only test executes a second facade. Source review separately confirms that
 the clear remains nested inside the existing Actor-owned task context.
 Changes to frame, ownership, lifecycle, call-option, or clock contracts require
 Core tests and the generated Embedded validation.
+
+`ActorCodecBufferTests` owns golden wire bytes, unaligned integer reads,
+truncated input, snapshot isolation, slice retention and throwing borrow tests.
+The immutable byte storage and stack-local reader/encoder state are identical
+on Native, WASM and Embedded; this change adds no shared mutable storage,
+conditional isolation, or Sendable differences. The existing Codable-only
+Native conformance remains the sole conditional byte-buffer declaration.
+`Validation/CodecBenchmark.swift` measures the same optimized encode/decode
+workload before and after the change; checksums must agree. Runtime validation
+must also exercise regenerated calls on both WASI SDKs. These changes preserve
+Distributed/Embedded assumptions and the package wire contract.

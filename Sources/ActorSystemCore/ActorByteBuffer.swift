@@ -81,6 +81,16 @@ public struct ActorByteBuffer: Hashable, Sendable {
         )
     }
 
+    /// Borrows the readable bytes for one synchronous call; the span cannot escape.
+    public func withRawSpan<Result>(
+        _ body: (RawSpan) throws -> Result
+    ) rethrows -> Result {
+        try withUnsafeBytes { buffer in
+            // Storage owns initialized, immutable bytes throughout this borrow.
+            try body(RawSpan(_unsafeBytes: buffer))
+        }
+    }
+
     public func withUnsafeBytes<Result>(
         _ body: (UnsafeRawBufferPointer) throws -> Result
     ) rethrows -> Result {
