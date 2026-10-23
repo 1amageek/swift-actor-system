@@ -54,6 +54,22 @@ output lifecycle.
 
 ## Failure, Concurrency, and Constraints
 
+Compiler invocations use synchronous, file-backed output capture. The invocation
+owns its temporary directory and handles until the child exits and its output
+has been read. Standard output and error stay distinct for metadata parsing;
+the version fingerprint deliberately combines them in write order, preserving
+the previous fingerprint contract. Child failure retains its exact status and
+diagnostics. Launch and file I/O failures propagate to the caller. Temporary
+output uses disk proportional to compiler output, matching the existing SIL
+extraction approach; capture does not silently truncate diagnostics or impose
+a new output limit. This change preserves all public synchronous signatures.
+
+```text
+resolver / fingerprint / SIL extractor
+    -> compiler process -> temporary output files
+    -> exit status + captured bytes -> caller validation
+```
+
 Resolution must not silently fall back to a host target or mismatched SDK.
 Inputs are read-only compiler metadata and no asynchronous operation occurs in
 the resolver's synchronous state path.
@@ -63,3 +79,8 @@ the resolver's synchronous state path.
 `Tests/ActorSystemBuildSupportTests` covers target extraction and environment
 resolution. Changes require the generation tests and pinned native/Embedded
 projection commands to be rerun.
+
+Compiler capture regressions in `ActorCompilerProcessTests` exercise output
+larger than pipe capacity, separate and combined streams, nonzero exits, and
+launch failure. Resolver tests use a real executable fixture. Changing capture
+does not change Generation's mapping protocol or Tool's synchronous entry point.

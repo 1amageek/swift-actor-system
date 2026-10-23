@@ -3,22 +3,19 @@ import Foundation
 
 public enum ActorToolchainFingerprint {
     public static func compute(swiftCompiler: URL) throws -> String {
-        let pipe = Pipe()
-        let process = Process()
-        process.executableURL = swiftCompiler
-        process.arguments = ["--version"]
-        process.standardOutput = pipe
-        process.standardError = pipe
-        try process.run()
-        process.waitUntilExit()
+        let result = try ActorCompilerProcess.run(
+            executable: swiftCompiler,
+            arguments: ["--version"],
+            combineOutput: true
+        )
         let output = String(
-            decoding: pipe.fileHandleForReading.readDataToEndOfFile(),
+            decoding: result.standardOutput,
             as: UTF8.self
         ).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard process.terminationStatus == 0, !output.isEmpty else {
+        guard result.status == 0, !output.isEmpty else {
             throw ActorGenerationError.toolchainFailure(
                 command: "\(swiftCompiler.path) --version",
-                status: process.terminationStatus,
+                status: result.status,
                 output: output
             )
         }

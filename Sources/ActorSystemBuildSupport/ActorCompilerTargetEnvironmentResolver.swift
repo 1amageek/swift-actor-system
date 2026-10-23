@@ -13,21 +13,13 @@ public enum ActorCompilerTargetEnvironmentResolver {
         atomicBitWidthCandidates: [Int] = [8, 16, 32, 64, 128]
     ) throws -> ActorGenerationTargetEnvironment {
         let arguments = ["-print-target-info"] + compilerArguments
-        let process = Process()
-        let standardOutput = Pipe()
-        let standardError = Pipe()
-        process.executableURL = swiftCompiler
-        process.arguments = arguments
-        process.standardOutput = standardOutput
-        process.standardError = standardError
-        try process.run()
-        let data = standardOutput.fileHandleForReading.readDataToEndOfFile()
-        let errorData = standardError.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        let output = try ActorCompilerProcess.run(executable: swiftCompiler, arguments: arguments)
+        let data = output.standardOutput
+        let errorData = output.standardError
+        guard output.status == 0 else {
             throw ActorGenerationError.toolchainFailure(
                 command: ([swiftCompiler.path] + arguments).joined(separator: " "),
-                status: process.terminationStatus,
+                status: output.status,
                 output: [data, errorData]
                     .map { String(decoding: $0, as: UTF8.self) }
                     .filter { !$0.isEmpty }
@@ -40,7 +32,7 @@ public enum ActorCompilerTargetEnvironmentResolver {
         } catch {
             throw ActorGenerationError.toolchainFailure(
                 command: ([swiftCompiler.path] + arguments).joined(separator: " "),
-                status: process.terminationStatus,
+                status: output.status,
                 output: "Invalid -print-target-info response: \(error)"
             )
         }
@@ -128,23 +120,15 @@ public enum ActorCompilerTargetEnvironmentResolver {
         }.joined(separator: "\n")
         try source.write(to: sourceURL, atomically: true, encoding: .utf8)
         let arguments = compilerArguments + ["-typecheck", "-dump-ast", sourceURL.path]
-        let process = Process()
-        let standardOutput = Pipe()
-        let standardError = Pipe()
-        process.executableURL = swiftCompiler
-        process.arguments = arguments
-        process.standardOutput = standardOutput
-        process.standardError = standardError
-        try process.run()
-        let data = standardOutput.fileHandleForReading.readDataToEndOfFile()
-        let errorData = standardError.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        let output = try ActorCompilerProcess.run(executable: swiftCompiler, arguments: arguments)
+        let data = output.standardOutput
+        let errorData = output.standardError
         let description = String(decoding: data, as: UTF8.self)
         let diagnostics = String(decoding: errorData, as: UTF8.self)
-        guard process.terminationStatus == 0 else {
+        guard output.status == 0 else {
             throw ActorGenerationError.toolchainFailure(
                 command: ([swiftCompiler.path] + arguments).joined(separator: " "),
-                status: process.terminationStatus,
+                status: output.status,
                 output: [description, diagnostics]
                     .filter { !$0.isEmpty }
                     .joined(separator: "\n")
@@ -198,23 +182,15 @@ public enum ActorCompilerTargetEnvironmentResolver {
         }.joined(separator: "\n")
         try source.write(to: sourceURL, atomically: true, encoding: .utf8)
         let arguments = compilerArguments + ["-typecheck", "-dump-ast", sourceURL.path]
-        let process = Process()
-        let standardOutput = Pipe()
-        let standardError = Pipe()
-        process.executableURL = swiftCompiler
-        process.arguments = arguments
-        process.standardOutput = standardOutput
-        process.standardError = standardError
-        try process.run()
-        let data = standardOutput.fileHandleForReading.readDataToEndOfFile()
-        let errorData = standardError.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        let output = try ActorCompilerProcess.run(executable: swiftCompiler, arguments: arguments)
+        let data = output.standardOutput
+        let errorData = output.standardError
         let description = String(decoding: data, as: UTF8.self)
         let diagnostics = String(decoding: errorData, as: UTF8.self)
-        guard process.terminationStatus == 0 else {
+        guard output.status == 0 else {
             throw ActorGenerationError.toolchainFailure(
                 command: ([swiftCompiler.path] + arguments).joined(separator: " "),
-                status: process.terminationStatus,
+                status: output.status,
                 output: [description, diagnostics]
                     .filter { !$0.isEmpty }
                     .joined(separator: "\n")

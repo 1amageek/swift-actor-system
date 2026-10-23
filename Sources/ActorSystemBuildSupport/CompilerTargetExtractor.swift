@@ -50,7 +50,6 @@ public enum CompilerTargetExtractor {
 
         let probeURL = temporaryDirectory.appendingPathComponent("ActorSystemTargetProbes.swift")
         let silURL = temporaryDirectory.appendingPathComponent("ActorSystemTargetProbes.sil")
-        let diagnosticsURL = temporaryDirectory.appendingPathComponent("compiler-diagnostics.txt")
         let probeValueFunctionName = "__actorSystemProbeValue_\(UUID().uuidString.replacingOccurrences(of: "-", with: "_"))"
         try renderProbeSource(
             probes: probes,
@@ -71,38 +70,16 @@ public enum CompilerTargetExtractor {
         arguments.append(probeURL.path)
         arguments.append(contentsOf: ["-o", silURL.path])
 
-        guard FileManager.default.createFile(
-            atPath: diagnosticsURL.path,
-            contents: nil
-        ) else {
-            throw ActorGenerationError.sourceWriteFailure(
-                path: diagnosticsURL.path,
-                reason: "Cannot create compiler diagnostics output"
-            )
-        }
-        let diagnosticsHandle = try FileHandle(forWritingTo: diagnosticsURL)
-        defer {
-            do {
-                try diagnosticsHandle.close()
-            } catch {
-                // The compiler exit status remains the authoritative result.
-            }
-        }
-        let process = Process()
-        process.executableURL = request.swiftCompiler
-        process.arguments = arguments
-        process.standardOutput = diagnosticsHandle
-        process.standardError = diagnosticsHandle
-        try process.run()
-        process.waitUntilExit()
-        try diagnosticsHandle.synchronize()
-
-        let diagnosticsData = try Data(contentsOf: diagnosticsURL)
-        let diagnostics = String(decoding: diagnosticsData, as: UTF8.self)
-        guard process.terminationStatus == 0 else {
+        let output = try ActorCompilerProcess.run(
+            executable: request.swiftCompiler,
+            arguments: arguments,
+            combineOutput: true
+        )
+        let diagnostics = String(decoding: output.standardOutput, as: UTF8.self)
+        guard output.status == 0 else {
             throw ActorGenerationError.toolchainFailure(
                 command: ([request.swiftCompiler.path] + arguments).joined(separator: " "),
-                status: process.terminationStatus,
+                status: output.status,
                 output: diagnostics
             )
         }
