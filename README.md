@@ -4,10 +4,11 @@
 distributed actors, with source-generated portable codecs and projections for
 native and Embedded Swift targets.
 
-The 0.1.0 release provides the Core, Distributed, Embedded, Generation,
+The 0.3.0 release provides the Core, Distributed, Embedded, Generation,
 BuildSupport, Compatibility, and TestSupport modules plus the `actor-system`
 generation tool. The package targets the
-Swift 6.4 development snapshot pinned in `.swift-version`.
+Swift 6.4.0 release toolchain pinned in `.swift-version` and matching
+WASM SDKs. The minimum macOS deployment target remains macOS 15.
 
 ## Architecture
 
@@ -34,7 +35,7 @@ provides the actual timer and transport implementation.
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/1amageek/swift-actor-system.git", from: "0.1.0")
+    .package(url: "https://github.com/1amageek/swift-actor-system.git", from: "0.3.0")
 ]
 ```
 
@@ -90,3 +91,31 @@ The fixture documents the pinned toolchain, dependency revision, and commands.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Swift 6.4 improvements in 0.3.0
+
+Compiler output is captured in temporary files so large stdout/stderr streams
+cannot deadlock generation. Public compiler and generation APIs remain
+synchronous, with unchanged exit-status and diagnostic propagation.
+
+`ActorByteBuffer.withRawSpan` provides a scoped, nonescaping borrow of its
+readable range. Payload and frame integer reads use safe RawSpan loads after
+length validation. Integer, Boolean, string and enum encoding writes directly
+to the destination buffer while preserving wire version 1 and snapshot values.
+
+The [codec benchmark](Validation/CodecBenchmark.swift) performs 20,000 payload
+encode/decode roundtrips with 20 fields. On arm64 macOS 27 with Swift 6.4.0 and
+`-O`, the median of five samples decreased from 68.43 ms to 42.95 ms (37.2%).
+The checksums matched. This measures the codec workload, not network throughput.
+Reproduce it from the package root:
+
+```sh
+scripts/swift-test-timeout.sh 180 -- xcrun swiftc \
+  -sdk "$(xcrun --sdk macosx --show-sdk-path)" \
+  -O -whole-module-optimization -parse-as-library \
+  -module-name ActorSystemCore -package-name swift_actor_system \
+  -enable-upcoming-feature ApproachableConcurrency \
+  Sources/ActorSystemCore/*.swift Validation/CodecBenchmark.swift \
+  -o /tmp/actor-codec-benchmark
+scripts/swift-test-timeout.sh 90 -- /tmp/actor-codec-benchmark
+```

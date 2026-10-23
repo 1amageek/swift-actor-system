@@ -10,6 +10,10 @@
           "compilerTargetAliases" : [
             {
               "targetIdentifier" : "$s14CounterFixture0A0C9incrementyS2iYaKFTE",
+              "toolchainFingerprint" : "swiftc-acdb02f3f8f2c199872ad88f110f088e"
+            },
+            {
+              "targetIdentifier" : "$s14CounterFixture0A0C9incrementyS2iYaKFTE",
               "toolchainFingerprint" : "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3"
             }
           ],
@@ -30,6 +34,10 @@
           "compilerTargetAliases" : [
             {
               "targetIdentifier" : "$s14CounterFixture0A0C6rejectAA0A5ErrorOyYaKFTE",
+              "toolchainFingerprint" : "swiftc-acdb02f3f8f2c199872ad88f110f088e"
+            },
+            {
+              "targetIdentifier" : "$s14CounterFixture0A0C6rejectAA0A5ErrorOyYaKFTE",
               "toolchainFingerprint" : "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3"
             }
           ],
@@ -44,6 +52,10 @@
         {
           "canonicalSignature" : "validate(_:Int)->CounterError:async:throws",
           "compilerTargetAliases" : [
+            {
+              "targetIdentifier" : "$s14CounterFixture0A0C8validateyAA0A5ErrorOSiYaKFTE",
+              "toolchainFingerprint" : "swiftc-acdb02f3f8f2c199872ad88f110f088e"
+            },
             {
               "targetIdentifier" : "$s14CounterFixture0A0C8validateyAA0A5ErrorOSiYaKFTE",
               "toolchainFingerprint" : "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3"
@@ -85,6 +97,10 @@
         {
           "canonicalSignature" : "validate(_:Int)->Int:async:throws(CounterError)",
           "compilerTargetAliases" : [
+            {
+              "targetIdentifier" : "$s14CounterFixture05TypedA0C8validateyS2iYaKFTE",
+              "toolchainFingerprint" : "swiftc-acdb02f3f8f2c199872ad88f110f088e"
+            },
             {
               "targetIdentifier" : "$s14CounterFixture05TypedA0C8validateyS2iYaKFTE",
               "toolchainFingerprint" : "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3"

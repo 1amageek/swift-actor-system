@@ -10,7 +10,7 @@ public enum CounterFixtureActorSystemBootstrap: SwiftActorSystemBootstrap {
         try actorSystem.registerCodec(CounterError.self, typeID: ActorTypeID(high: 10033138577471328340, low: 3038637286077199023), codec: .portable())
         try actorSystem.registerCodec(Int.self, typeID: ActorTypeID(high: 17136416053037652511, low: 11586992519881825816), codec: .portable())
         let counterAliases = try ActorTargetAliasTable(
-            toolchainFingerprint: "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3",
+            toolchainFingerprint: "swiftc-acdb02f3f8f2c199872ad88f110f088e",
             aliases: [
                 "$s14CounterFixture0A0C9incrementyS2iYaKFTE": ActorMethodID(9185592791354217434),
                 "$s14CounterFixture0A0C6rejectAA0A5ErrorOyYaKFTE": ActorMethodID(18397614679172336117),
@@ -25,7 +25,7 @@ public enum CounterFixtureActorSystemBootstrap: SwiftActorSystemBootstrap {
             ).eraseToAnyRegistration()
         )
         let typedCounterAliases = try ActorTargetAliasTable(
-            toolchainFingerprint: "swiftc-d2d377a9b66c040c0cb1cfbd1250d9e3",
+            toolchainFingerprint: "swiftc-acdb02f3f8f2c199872ad88f110f088e",
             aliases: [
                 "$s14CounterFixture05TypedA0C8validateyS2iYaKFTE": ActorMethodID(1416151564143678790),
             ]

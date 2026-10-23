@@ -24,26 +24,25 @@ the Native compiler's `Distributed` module is not an Embedded dependency.
 
 | Component | Value |
 | --- | --- |
-| Swift compiler | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a` |
-| Compiler commit | `424cae54c1a10da` |
-| Embedded SDK | `swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded` |
+| Swift compiler | `swift-6.4.0-RELEASE` |
+| Host toolchain | `org.swift.640202609131a` (release `swift-6.4-RELEASE`) |
+| Embedded SDK | `swift-6.4.0-RELEASE_wasm-embedded` |
 | Target | `wasm32-unknown-wasip1` |
 | Runtime | Node.js WASI (`node`, or `NODE` override) |
 
 The Embedded SDK's `libswiftUnicodeDataTables.a` is required by the actor
 runtime's `String` paths. Resolve it from the matching SDK configuration; do
-not use a library from another snapshot.
+not use a library from another toolchain.
 
 ## Generate and build
 
-The validation package pins the public `swift-actor-system` Git revision
-`082a02186280bd7e3d90db0a2e429591f7ee5420`, containing the typed-error and
-task-scoped call-options fixes.
-It requires no local dependency path or edit override. This unreleased
-revision must be replaced with the corresponding version at a future release.
+The validation package depends on the public `swift-actor-system` 0.3.0
+release. Published-release verification requires no local dependency path or
+edit override. During development, SwiftPM edits must use the same scratch
+path as the corresponding build and must be removed before tagging.
 
 Run the generation and build commands below from the repository root. The
-tool is built first with the pinned Swiftly selector, and the SDK root and
+tool is built first with the pinned release toolchain, and the SDK root and
 Swift resources are derived from that toolchain's SDK configuration. The
 first generation command is authoritative native generation; the following
 two commands are lock-checked Embedded projections. The generated output
@@ -52,16 +51,19 @@ files are checked in for the validation package.
 
 ```sh
 set -eu
-SWIFT_VERSION=6.4.x-snapshot-2026-08-14
-SWIFT="$(swiftly run "+$SWIFT_VERSION" which swift)"
-SWIFTC="$(swiftly run "+$SWIFT_VERSION" which swiftc)"
+SWIFT="${SWIFT:-$(xcrun --find swift)}"
+SWIFTC="${SWIFTC:-$(xcrun --find swiftc)}"
+"$SWIFT" --version
+"$SWIFTC" --version
+"$SWIFT" sdk list
+# Both compilers must report the Swift 6.4 release; SDK IDs below must match.
 TIMEOUT="$PWD/scripts/swift-test-timeout.sh"
 VALIDATION="$PWD/Validation/EmbeddedWASM"
 SCRATCH="$VALIDATION/.build-embedded"
 CONFIG="$VALIDATION/.swiftpm/config"
 TARGET=wasm32-unknown-wasip1
-EMBEDDED_SDK_ID=swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm-embedded
-WASM_SDK_ID=swift-6.4.x-DEVELOPMENT-SNAPSHOT-2026-08-14-a_wasm
+EMBEDDED_SDK_ID=swift-6.4.0-RELEASE_wasm-embedded
+WASM_SDK_ID=swift-6.4.0-RELEASE_wasm
 NODE="${NODE:-$(command -v node)}"
 MACOS_SDK="${MACOS_SDK:-$(xcrun --sdk macosx --show-sdk-path)}"
 
@@ -185,3 +187,15 @@ inside a temporary scope; a later inbound interceptor calls a second generated
 actor and verifies that it uses its own initializer timeout, not the expired
 startup scope. Every actor system is explicitly shut down. These checks use
 manual clocks and Node WASI; they do not establish Cloudflare page-host behavior.
+
+## Release 0.3.0 evidence
+
+Swift 6.4.0 release generation preserves all actor, method, value, field and
+case IDs and schema fingerprints. Compiler target aliases are refreshed for
+the release compiler. Generated Native, Standard WASM and Embedded WASM calls
+must pass the success, typed failure, cancellation and terminal shutdown
+checks above. New RawSpan integer reads execute through the real binary frame
+adapter. Native focused tests additionally cover golden bytes, unaligned
+slices, truncation, snapshot retention and storage release, including Address
+Sanitizer validation. The Node WASI evidence does not establish browser,
+Cloudflare-host or hardware-board behavior.

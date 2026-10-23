@@ -45,7 +45,7 @@ validation or failure mapping.
 | [`Sources/ActorSystemCompatibility/DESIGN.md`](Sources/ActorSystemCompatibility/DESIGN.md) | child | legacy actor gateway and bridge contracts | Explicit legacy protocol adapter | Legacy typed failures remain explicit unsupported outcomes |
 | [`Sources/ActorSystemTestSupport/DESIGN.md`](Sources/ActorSystemTestSupport/DESIGN.md) | child | deterministic clocks and in-memory transports | Contract fixtures for package tests | Fixtures must preserve transport and lifecycle failure semantics |
 | [`Sources/ActorSystemTool/DESIGN.md`](Sources/ActorSystemTool/DESIGN.md) | child | command-line generation and projection entry point | User-facing build tool | CLI delegates validation to package generation contracts |
-| `Validation/EmbeddedWASM` | verification consumer | generated host/client and lifecycle contracts | End-to-end Embedded validation fixture | Runtime evidence is limited to the pinned toolchain and Node runner |
+| `Validation/EmbeddedWASM` | verification consumer | generated host/client and lifecycle contracts | End-to-end Embedded validation fixture | Runtime evidence is limited to Swift 6.4.0, matching WASI SDKs, and the Node runner |
 
 ## Architecture
 
@@ -83,7 +83,8 @@ ActorSystemCore
   detection never removes this isolation.
 - `ActorByteBuffer` retains storage while views are borrowed. Binary encoding
   is performed only at the transport/wire boundary; Core passes frame payload
-  views without eager `Data` materialization.
+  views without eager `Data` materialization. Scoped RawSpan borrowing and codec
+  compatibility are owned by the [Core contract](Sources/ActorSystemCore/DESIGN.md).
 - Shutdown is terminal: it drains owned tasks, releases registrations outside
   registration critical sections, and rejects later invocation/resolve work.
 - Task-scoped call options follow the
